@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"github.com/olekukonko/tablewriter"
+	"github.com/peterh/liner"
 	"golang.org/x/term"
 )
 
@@ -104,24 +106,42 @@ func isTerminal() bool {
 }
 
 func repl(db *sql.DB, outputFormat OutputFormat) {
-	scanner := bufio.NewScanner(os.Stdin)
+	line := liner.NewLiner()
+	defer line.Close()
+
+	historyFile := filepath.Join(os.Getenv("HOME"), ".tidbcli.history")
+	if f, err := os.Open(historyFile); err == nil {
+		line.ReadHistory(f)
+		f.Close()
+	}
+
 	_, err := db.Exec("SET GLOBAL tidb_multi_statement_mode='ON';")
 	if err != nil {
 		log.Printf("Failed to set tidb_multi_statement_mode: %v", err)
 		os.Exit(1)
 	}
+
 	for {
+		var prompt string
 		if isTerminal() {
-			fmt.Printf("> ")
+			var curDB string
+			db.QueryRow("SELECT DATABASE()").Scan(&curDB)
+			if curDB == "" {
+				curDB = "(none)"
+			}
+			prompt = fmt.Sprintf("%s> ", curDB)
 		}
-		exit := scanner.Scan()
-		if !exit {
+
+		query, err := line.Prompt(prompt)
+		if err != nil {
 			break
 		}
-		query := scanner.Text()
+		line.AppendHistory(query)
+
 		if query == "" {
 			continue
 		}
+
 		rows, err := db.Query(query)
 		if err != nil {
 			log.Printf("Failed to execute SQL: %v", err)
@@ -163,8 +183,32 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		printResults(output, outputFormat, hasRows)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Printf("Failed to read input: %v", err)
+	if f, err := os.Create(historyFile); err != nil {
+		log.Printf("Error writing history file: %v", err)
+	} else {
+		line.WriteHistory(f)
+		f.Close()
+	}
+}
+
+func formatValue(val interface{}) string {
+	switch v := val.(type) {
+	case nil:
+		return "NULL"
+	case bool:
+		return fmt.Sprintf("%t", v)
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+	case float64:
+		return fmt.Sprintf("%f", v)
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case time.Time:
+		return v.Format("2006-01-02 15:04:05")
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }
 
@@ -180,24 +224,7 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool) {
 		for _, row := range output {
 			for i, col := range row.colNames {
 				val := row.colValues[i]
-				switch v := val.(type) {
-				case nil:
-					fmt.Printf("%s: NULL ", col)
-				case bool:
-					fmt.Printf("%s: %t ", col, v)
-				case int, int64:
-					fmt.Printf("%s: %d ", col, v)
-				case float64:
-					fmt.Printf("%s: %f ", col, v)
-				case string:
-					fmt.Printf("%s: %s ", col, v)
-				case []byte:
-					fmt.Printf("%s: %s ", col, string(v))
-				case time.Time:
-					fmt.Printf("%s: %s ", col, v.Format("2006-01-02 15:04:05"))
-				default:
-					fmt.Printf("%s: %v ", col, v)
-				}
+				fmt.Printf("%s: %s ", col, formatValue(val))
 			}
 			fmt.Println()
 		}
@@ -212,24 +239,7 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool) {
 			rowData := make([]string, len(cols))
 			for i := range cols {
 				val := row.colValues[i]
-				switch v := val.(type) {
-				case nil:
-					rowData[i] = ""
-				case bool:
-					rowData[i] = fmt.Sprintf("%t", v)
-				case int, int64:
-					rowData[i] = fmt.Sprintf("%d", v)
-				case float64:
-					rowData[i] = fmt.Sprintf("%f", v)
-				case string:
-					rowData[i] = v
-				case []byte:
-					rowData[i] = string(v)
-				case time.Time:
-					rowData[i] = v.Format("2006-01-02 15:04:05")
-				default:
-					rowData[i] = fmt.Sprintf("%v", v)
-				}
+				rowData[i] = formatValue(val)
 			}
 			table.Append(rowData)
 		}
@@ -251,7 +261,7 @@ func main() {
 	pass := flag.String("P", "", "TiDB password")
 	dbName := flag.String("d", "test", "TiDB database")
 	configFile := flag.String("c", "", "Path to configuration file")
-	outputFormat := flag.String("o", "plain", "Output format: plain or json")
+	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	flag.Parse()
 
 	// Load config from file if provided

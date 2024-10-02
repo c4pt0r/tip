@@ -6,6 +6,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/peterh/liner v1.2.2
 	golang.org/x/term v0.24.0
 )
 
