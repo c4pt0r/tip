@@ -7,7 +7,7 @@ TiDB CLI is a command-line interface tool for interacting with TiDB databases (S
 To install TiDB CLI, make sure you have Go installed on your system, then run:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/c4pt0r/tidbcli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/c4pt0r/tidbcli/refs/heads/master/install.sh | sh
 ```
 
 ## Configuration
