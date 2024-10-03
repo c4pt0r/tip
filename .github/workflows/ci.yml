@@ -61,7 +61,16 @@ jobs:
             exit 1
           fi
           
-          GOARCH=${{ matrix.arch }} go build -o tidb-cli-${GOOS}-${{ matrix.arch }}
+          # Set version
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            VERSION="nightly-$(date +'%Y%m%d')"
+          else
+            VERSION=$(git rev-parse --short HEAD)
+          fi
+          
+          GOARCH=${{ matrix.arch }} go build -ldflags="-X 'main.Version=${VERSION}'" -o tidb-cli-${GOOS}-${{ matrix.arch }}
         shell: bash
 
       - name: Upload artifact

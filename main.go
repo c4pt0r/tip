@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -260,6 +261,8 @@ func getDefaultConfigFilePath() string {
 	return configFile
 }
 
+var Version = "dev"
+
 func main() {
 	// Command-line flags
 	host := flag.String("h", "127.0.0.1", "TiDB Serverless hostname")
@@ -270,6 +273,7 @@ func main() {
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
+	version := flag.Bool("v", false, "Display version information")
 	flag.Parse()
 
 	// Load config from file if provided
@@ -356,7 +360,13 @@ func main() {
 		printResults(output, parseOutputFormat(*outputFormat), hasRows)
 		return // Exit after executing the SQL
 	}
-
+	if *version {
+		if info, ok := debug.ReadBuildInfo(); ok && Version == "dev" {
+			Version = info.Main.Version
+		}
+		fmt.Printf("TiDBCLI version %s\n", Version)
+		os.Exit(0)
+	}
 	// Execute queries in REPL mode
 	repl(db, parseOutputFormat(*outputFormat))
 }
