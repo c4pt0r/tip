@@ -107,18 +107,16 @@ func isTerminal() bool {
 
 func repl(db *sql.DB, outputFormat OutputFormat) {
 	line := liner.NewLiner()
-	defer line.Close()
+	defer func() {
+		line.Close()
+		// show cursor
+		fmt.Print("\033[?25h")
+	}()
 
 	historyFile := filepath.Join(os.Getenv("HOME"), ".tidbcli.history")
 	if f, err := os.Open(historyFile); err == nil {
 		line.ReadHistory(f)
 		f.Close()
-	}
-
-	_, err := db.Exec("SET GLOBAL tidb_multi_statement_mode='ON';")
-	if err != nil {
-		log.Printf("Failed to set tidb_multi_statement_mode: %v", err)
-		os.Exit(1)
 	}
 
 	for {
@@ -315,6 +313,14 @@ func main() {
 	db.SetMaxOpenConns(100)
 	db.SetMaxIdleConns(100)
 
+	err = db.Ping()
+	if err != nil {
+		log.Fatalf("Failed to connect to TiDB: %v", err)
+	}
+	_, err = db.Exec("SET GLOBAL tidb_multi_statement_mode='ON';")
+	if err != nil {
+		log.Fatalf("Failed to set tidb_multi_statement_mode: %v", err)
+	}
 	// Execute queries
 	repl(db, parseOutputFormat(*outputFormat))
 }
