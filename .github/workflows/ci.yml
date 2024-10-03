@@ -6,14 +6,24 @@ on:
       - main
   schedule:
     - cron: '0 0 * * *'  # Nightly build at midnight UTC
+  workflow_dispatch:  # Allows manual triggering
+
+permissions:
+  contents: write  # Grant the workflow permission to write to repository contents
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: [1.19, 1.20]
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        go-version: [1.21.1]
+        include:
+          # Add a specific build for Raspberry Pi (ARM)
+          - os: ubuntu-latest
+            arch: arm
+            go-version: 1.21.1
 
     steps:
       - name: Checkout code
@@ -37,80 +47,79 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Get git hash
+        id: git_info
+        run: echo "GIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+      - name: Check if release exists for this git hash
+        run: |
+          if gh release list | grep -q "nightly-${{ env.GIT_HASH }}"; then
+            echo "Nightly for this git hash already exists. Skipping build."
+            exit 0
+          fi
+
       - name: Build
-        run: go build -o myapp
+        run: |
+          # Set GOOS based on the runner OS
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            GOOS=linux
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            GOOS=darwin
+          else
+            echo "Unsupported OS: ${{ runner.os }}"
+            exit 1
+          fi
+          
+          GOARCH=${{ matrix.arch }} go build -o tidb-cli-${GOOS}-${{ matrix.arch }}
+        shell: bash
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: myapp-${{ matrix.os }}-${{ matrix.go-version }}
-          path: myapp
+          name: tidb-cli-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.go-version }}
+          path: tidb-cli-*
 
   nightly:
+    needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          go-version: 1.20
+          path: artifacts
 
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: Get git hash
+        id: git_info
+        run: echo "GIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Build for multiple platforms
+      - name: Create a new tag with date and git hash
+        id: tag_version
         run: |
-          GOOS=linux GOARCH=amd64 go build -o myapp-linux-amd64
-          GOOS=darwin GOARCH=amd64 go build -o myapp-macos-amd64
-          GOOS=windows GOARCH=amd64 go build -o myapp-windows-amd64.exe
+          DATE=$(date +'%Y%m%d')  # Get current date in YYYYMMDD format
+          TAG="nightly-${DATE}-${{ env.GIT_HASH }}"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git tag $TAG
+          git push origin $TAG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create release draft
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create release
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: nightly-${{ github.run_id }}
-          release_name: Nightly Build ${{ github.run_id }}
-          draft: true
+          tag_name: ${{ env.TAG }}
+          name: Nightly Build ${{ github.run_id }}
+          draft: false
           prerelease: true
+          files: artifacts/**/*
           body: |
             Nightly build generated on ${{ github.run_date }}.
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Linux build to release
-        uses: actions/upload-release-asset@v2
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./myapp-linux-amd64
-          asset_name: myapp-linux-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload MacOS build to release
-        uses: actions/upload-release-asset@v2
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./myapp-macos-amd64
-          asset_name: myapp-macos-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows build to release
-        uses: actions/upload-release-asset@v2
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./myapp-windows-amd64.exe
-          asset_name: myapp-windows-amd64.exe
-          asset_content_type: application/octet-stream
-
+            This release includes builds for Linux (amd64, arm64, arm), and macOS (amd64, arm64).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
