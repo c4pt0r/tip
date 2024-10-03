@@ -269,6 +269,7 @@ func main() {
 	dbName := flag.String("d", "test", "TiDB database")
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
+	execSQL := flag.String("e", "", "Execute SQL statement and exit")
 	flag.Parse()
 
 	// Load config from file if provided
@@ -322,14 +323,40 @@ func main() {
 	db.SetMaxOpenConns(100)
 	db.SetMaxIdleConns(100)
 
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("Failed to connect to TiDB: %v", err)
+	// Check if -e flag is provided
+	if *execSQL != "" {
+		// Execute the provided SQL statement
+		rows, err := db.Query(*execSQL)
+		if err != nil {
+			log.Fatalf("Failed to execute SQL: %v", err)
+		}
+		defer rows.Close()
+
+		// Process and print the results
+		cols, _ := rows.Columns()
+		var output []RowResult
+		hasRows := false
+		for rows.Next() {
+			hasRows = true
+			results := make([]interface{}, len(cols))
+			pointers := make([]interface{}, len(cols))
+			for i := range results {
+				pointers[i] = &results[i]
+			}
+			rows.Scan(pointers...)
+			rowData := RowResult{
+				colNames:  cols,
+				colValues: make([]interface{}, len(cols)),
+			}
+			for i := range cols {
+				rowData.colValues[i] = results[i]
+			}
+			output = append(output, rowData)
+		}
+		printResults(output, parseOutputFormat(*outputFormat), hasRows)
+		return // Exit after executing the SQL
 	}
-	_, err = db.Exec("SET GLOBAL tidb_multi_statement_mode='ON';")
-	if err != nil {
-		log.Fatalf("Failed to set tidb_multi_statement_mode: %v", err)
-	}
-	// Execute queries
+
+	// Execute queries in REPL mode
 	repl(db, parseOutputFormat(*outputFormat))
 }
