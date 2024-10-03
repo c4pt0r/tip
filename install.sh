@@ -69,7 +69,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
 # Example configuration options:
 # host = "localhost"
-# port = 4000
+# port = "4000"
 # user = "root"
 # password = ""
 # database = "test"
