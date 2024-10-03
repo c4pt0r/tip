@@ -47,17 +47,6 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Get git hash
-        id: git_info
-        run: echo "GIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
-
-      - name: Check if release exists for this git hash
-        run: |
-          if gh release list | grep -q "nightly-${{ env.GIT_HASH }}"; then
-            echo "Nightly for this git hash already exists. Skipping build."
-            exit 0
-          fi
-
       - name: Build
         run: |
           # Set GOOS based on the runner OS
@@ -82,44 +71,45 @@ jobs:
   nightly:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Get git hash
-        id: git_info
-        run: echo "GIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
-
-      - name: Create a new tag with date and git hash
-        id: tag_version
+      - name: Update nightly tag
         run: |
-          DATE=$(date +'%Y%m%d')  # Get current date in YYYYMMDD format
-          TAG="nightly-${DATE}-${{ env.GIT_HASH }}"
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git tag $TAG
-          git push origin $TAG
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -f nightly
+          git push origin nightly -f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create release
+      - name: Get current date
+        id: date
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Update or create nightly release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.TAG }}
-          name: Nightly Build ${{ github.run_id }}
+          tag_name: nightly
+          name: Nightly Build ${{ env.DATE }}
           draft: false
           prerelease: true
           files: artifacts/**/*
           body: |
-            Nightly build generated on ${{ github.run_date }}.
+            Nightly build generated on ${{ env.DATE }}.
             This release includes builds for Linux (amd64, arm64, arm), and macOS (amd64, arm64).
+            
+            This is a rolling release. The 'nightly' tag always points to the latest nightly build.
+          update_existing: true  # This will update the existing release if it exists
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
