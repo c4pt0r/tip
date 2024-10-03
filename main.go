@@ -251,6 +251,18 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool) {
 	}
 }
 
+func getDefaultConfigFilePath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Failed to get user home directory: %v", err)
+	}
+	configFile := filepath.Join(homeDir, ".tidbcli/config")
+	if _, err := os.Stat(configFile); err != nil {
+		return ""
+	}
+	return configFile
+}
+
 func main() {
 	// Command-line flags
 	host := flag.String("h", "127.0.0.1", "TiDB Serverless hostname")
@@ -258,7 +270,7 @@ func main() {
 	user := flag.String("u", "root", "TiDB username")
 	pass := flag.String("P", "", "TiDB password")
 	dbName := flag.String("d", "test", "TiDB database")
-	configFile := flag.String("c", "", "Path to configuration file")
+	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	flag.Parse()
 
