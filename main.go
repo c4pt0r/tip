@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
@@ -16,6 +15,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"github.com/olekukonko/tablewriter"
+	"github.com/pelletier/go-toml"
 	"github.com/peterh/liner"
 	"golang.org/x/term"
 )
@@ -46,20 +46,17 @@ func parseOutputFormat(format string) OutputFormat {
 // Load configuration from a file
 func loadConfigFromFile(configPath string) (map[string]string, error) {
 	config := make(map[string]string)
-	file, err := os.Open(configPath)
+	file, err := os.ReadFile(configPath)
 	if err != nil {
 		return config, err
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		var key, value string
-		fmt.Sscanf(line, "%s %s", &key, &value)
-		config[key] = value
+	err = toml.Unmarshal(file, &config)
+	if err != nil {
+		return config, err
 	}
-	return config, scanner.Err()
+
+	return config, nil
 }
 
 // Load configuration from environment variables or .env file
@@ -256,7 +253,7 @@ func getDefaultConfigFilePath() string {
 	if err != nil {
 		log.Fatalf("Failed to get user home directory: %v", err)
 	}
-	configFile := filepath.Join(homeDir, ".tidbcli/config")
+	configFile := filepath.Join(homeDir, ".tidbcli/config.toml")
 	if _, err := os.Stat(configFile); err != nil {
 		return ""
 	}

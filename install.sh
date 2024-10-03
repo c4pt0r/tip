@@ -26,7 +26,7 @@ DOWNLOAD_URL="https://github.com/c4pt0r/tidbcli/releases/download/nightly/tidb-c
 INSTALL_DIR="$HOME/.tidbcli/bin"
 
 # Set config file path
-CONFIG_FILE="$HOME/.tidbcli/config"
+CONFIG_FILE="$HOME/.tidbcli/config.toml"
 
 # Function to check if a command exists
 command_exists() {
