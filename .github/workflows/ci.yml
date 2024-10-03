@@ -69,7 +69,7 @@ jobs:
           elif [[ "${{ github.event_name }}" == "schedule" ]]; then
             VERSION="nightly-${TIMESTAMP}-${GIT_HASH}"
           else
-            VERSION="${GIT_HASH}-${TIMESTAMP}"
+            VERSION="${TIMESTAMP}-${GIT_HASH}"
           fi
           
           GOARCH=${{ matrix.arch }} go build -ldflags="-X 'main.Version=${VERSION}'" -o tidb-cli-${GOOS}-${{ matrix.arch }}
