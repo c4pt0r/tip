@@ -110,7 +110,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		fmt.Print("\033[?25h")
 	}()
 
-	historyFile := filepath.Join(os.Getenv("HOME"), ".tidbcli.history")
+	historyFile := filepath.Join(os.Getenv("HOME"), ".tidbcli/history")
 	if f, err := os.Open(historyFile); err == nil {
 		line.ReadHistory(f)
 		f.Close()
