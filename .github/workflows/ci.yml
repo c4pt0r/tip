@@ -62,12 +62,14 @@ jobs:
           fi
           
           # Set version
+          GIT_HASH=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
+            VERSION="${GITHUB_REF#refs/tags/}-${TIMESTAMP}-${GIT_HASH}"
           elif [[ "${{ github.event_name }}" == "schedule" ]]; then
-            VERSION="nightly-$(date +'%Y%m%d')"
+            VERSION="nightly-${TIMESTAMP}-${GIT_HASH}"
           else
-            VERSION=$(git rev-parse --short HEAD)
+            VERSION="${GIT_HASH}-${TIMESTAMP}"
           fi
           
           GOARCH=${{ matrix.arch }} go build -ldflags="-X 'main.Version=${VERSION}'" -o tidb-cli-${GOOS}-${{ matrix.arch }}
