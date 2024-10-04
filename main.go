@@ -390,7 +390,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
-		printResults(output, parseOutputFormat(*outputFormat), hasRows, startTime, affectedRows)
+
+		execTime := time.Since(startTime)
+		printResults(output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
 
 		return
 	}
