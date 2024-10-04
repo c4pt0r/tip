@@ -111,7 +111,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		fmt.Print("\033[?25h")
 	}()
 
-	historyFile := filepath.Join(os.Getenv("HOME"), ".tidbcli/history")
+	historyFile := filepath.Join(os.Getenv("HOME"), ".tip/history")
 	if f, err := os.Open(historyFile); err == nil {
 		line.ReadHistory(f)
 		f.Close()
@@ -254,7 +254,7 @@ func getDefaultConfigFilePath() string {
 	if err != nil {
 		log.Fatalf("Failed to get user home directory: %v", err)
 	}
-	configFile := filepath.Join(homeDir, ".tidbcli/config.toml")
+	configFile := filepath.Join(homeDir, ".tip/config.toml")
 	if _, err := os.Stat(configFile); err != nil {
 		return ""
 	}

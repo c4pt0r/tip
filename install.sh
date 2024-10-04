@@ -20,13 +20,13 @@ case "$ARCH" in
 esac
 
 # Set download URL
-DOWNLOAD_URL="https://github.com/c4pt0r/tidbcli/releases/download/nightly/tidb-cli-${OS}-${ARCH}"
+DOWNLOAD_URL="https://github.com/c4pt0r/tip/releases/download/nightly/tip-${OS}-${ARCH}"
 
 # Set installation directory
-INSTALL_DIR="$HOME/.tidbcli/bin"
+INSTALL_DIR="$HOME/.tip/bin"
 
 # Set config file path
-CONFIG_FILE="$HOME/.tidbcli/config.toml"
+CONFIG_FILE="$HOME/.tip/config.toml"
 
 # Function to check if a command exists
 command_exists() {
@@ -45,10 +45,10 @@ fi
 
 # Download the binary
 echo "Downloading TiDB CLI..."
-$DOWNLOAD_CMD /tmp/tidb-cli "$DOWNLOAD_URL"
+$DOWNLOAD_CMD /tmp/tip "$DOWNLOAD_URL"
 
 # Make the binary executable
-chmod +x /tmp/tidb-cli
+chmod +x /tmp/tip
 
 # Move the binary to the installation directory
 echo "Installing TiDB CLI to $INSTALL_DIR..."
@@ -56,9 +56,9 @@ echo "Installing TiDB CLI to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 
 if [ -w "$INSTALL_DIR" ]; then
-  mv /tmp/tidb-cli "$INSTALL_DIR/tidb-cli"
+  mv /tmp/tip "$INSTALL_DIR/tip"
 else
-  sudo mv /tmp/tidb-cli "$INSTALL_DIR/tidb-cli"
+  sudo mv /tmp/tip "$INSTALL_DIR/tip"
 fi
 
 # Create config file if it doesn't exist
@@ -82,6 +82,6 @@ else
 fi
 
 echo "TiDB CLI has been successfully installed!"
-echo "You can now use it by running 'tidb-cli' from the command line."
+echo "You can now use it by running 'tip' from the command line."
 echo "Make sure to edit your config file at $CONFIG_FILE with your TiDB connection details."
 echo "You can also add it to your PATH by running 'export PATH=\$PATH:$INSTALL_DIR'"

@@ -1,4 +1,4 @@
-module github.com/c4pt0r/tidb-cli
+module github.com/c4pt0r/tip
 
 go 1.21.1
 

@@ -6,7 +6,7 @@ A quick look 👀：
 
 ```
 echo 'source\nstatus' | parallel \
-'./tidb-cli -o json -e "SELECT COUNT(*) as count FROM {}" | \
+'./tip -o json -e "SELECT COUNT(*) as count FROM {}" | \
 jq -r ".[] | \"\(.count) records in {} table\""'
 ```
 
@@ -15,7 +15,7 @@ jq -r ".[] | \"\(.count) records in {} table\""'
 To install TiDB CLI, make sure you have Go installed on your system, then run:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/c4pt0r/tidbcli/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
 ```
 
 ## Configuration
@@ -23,13 +23,13 @@ curl -fsSL https://raw.githubusercontent.com/c4pt0r/tidbcli/refs/heads/master/in
 TiDB CLI can be configured in multiple ways:
 
 1. Command-line flags
-2. Configuration file (default: `~/.tidbcli/config`)
+2. Configuration file (default: `~/.tip/config`)
 3. Environment variables
 4. `.env` file in the current directory
 
 ### Configuration File Format
 
-Create a file named `config` in the `~/.tidbcli/` directory with the following format:
+Create a file named `config` in the `~/.tip/` directory with the following format:
 
 ```
 host=127.0.0.1
@@ -54,7 +54,7 @@ You can also set the following environment variables:
 Basic usage:
 
 ```
-tidbcli [flags]
+tip [flags]
 ```
 
 Flags:
@@ -70,7 +70,7 @@ Flags:
 Example:
 
 ```
-tidbcli -h mytidbserver.com -p 4000 -u myuser -P mypassword -d mydatabase
+tip -h mytidbserver.com -p 4000 -u myuser -P mypassword -d mydatabase
 ```
 
 Once connected, you'll be in an interactive REPL where you can enter SQL queries.

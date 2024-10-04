@@ -72,14 +72,14 @@ jobs:
             VERSION="${TIMESTAMP}-${GIT_HASH}"
           fi
           
-          GOARCH=${{ matrix.arch }} go build -ldflags="-X 'main.Version=${VERSION}'" -o tidb-cli-${GOOS}-${{ matrix.arch }}
+          GOARCH=${{ matrix.arch }} go build -ldflags="-X 'main.Version=${VERSION}'" -o tip-${GOOS}-${{ matrix.arch }}
         shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tidb-cli-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.go-version }}
-          path: tidb-cli-*
+          name: tip-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.go-version }}
+          path: tip-*
 
   nightly:
     needs: build
