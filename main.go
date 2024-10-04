@@ -167,8 +167,11 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		// show cursor
 		fmt.Print("\033[?25h")
 	}()
-
 	historyFile := filepath.Join(os.Getenv("HOME"), ".tip/history")
+	// ensure directory exists
+	if _, err := os.Stat(historyFile); os.IsNotExist(err) {
+		os.MkdirAll(filepath.Dir(historyFile), 0o755)
+	}
 	if f, err := os.Open(historyFile); err == nil {
 		line.ReadHistory(f)
 		f.Close()
