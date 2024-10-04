@@ -12,7 +12,7 @@ jq -r ".[] | \"\(.count) records in {} table\""'
 
 ## Installation
 
-To install TiDB CLI, make sure you have Go installed on your system, then run:
+To install tip, make sure you have Go installed on your system, then run:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
@@ -22,7 +22,7 @@ vim ~/.tip/config.toml
 
 ## Configuration
 
-TiDB CLI can be configured in multiple ways:
+tip can be configured in multiple ways:
 
 1. Command-line flags
 2. Configuration file (default: `~/.tip/config`)
@@ -79,7 +79,7 @@ Once connected, you'll be in an interactive REPL where you can enter SQL queries
 
 ## Output Formats
 
-TiDB CLI supports three output formats:
+tip supports three output formats:
 
 1. Plain: Simple text output
 2. Table: Formatted table output (default)
