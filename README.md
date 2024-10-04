@@ -25,20 +25,20 @@ vim ~/.tip/config.toml
 tip can be configured in multiple ways:
 
 1. Command-line flags
-2. Configuration file (default: `~/.tip/config`)
+2. Configuration file (default: `~/.tip/config.toml`)
 3. Environment variables
 4. `.env` file in the current directory
 
 ### Configuration File Format
 
-Create a file named `config` in the `~/.tip/` directory with the following format:
+Create a file named `config.toml` in the `~/.tip/` directory with the following format:
 
 ```
-host=127.0.0.1
-port=4000
-user=root
-password=your_password
-database=test
+host="127.0.0.1"
+port="4000"
+user="root"
+password="your_password"
+database="test"
 ```
 
 ### Environment Variables
