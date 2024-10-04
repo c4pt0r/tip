@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -173,6 +174,8 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		f.Close()
 	}
 
+	var queryBuilder string
+
 	for {
 		var prompt string
 		if isTerminal() {
@@ -181,28 +184,36 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			if curDB == "" {
 				curDB = "(none)"
 			}
-			prompt = fmt.Sprintf("%s> ", curDB)
+			if queryBuilder == "" {
+				prompt = fmt.Sprintf("%s> ", curDB)
+			} else {
+				prompt = fmt.Sprintf("%s>> ", curDB)
+			}
 		}
 
-		query, err := line.Prompt(prompt)
+		input, err := line.Prompt(prompt)
 		if err != nil {
 			break
 		}
-		line.AppendHistory(query)
 
-		if query == "" {
-			continue
+		trimmedInput := strings.TrimSpace(input)
+		queryBuilder += input + " "
+
+		// Check if the trimmed input ends with a semicolon
+		if len(trimmedInput) > 0 && trimmedInput[len(trimmedInput)-1] == ';' {
+			startTime := time.Now() // Start timing the query execution
+
+			output, hasRows, affectedRows, err := executeSQL(db, queryBuilder)
+			if err != nil {
+				log.Println(err)
+				queryBuilder = "" // Reset the query builder
+				continue
+			}
+
+			printResults(output, outputFormat, hasRows, startTime, affectedRows)
+			line.AppendHistory(queryBuilder) // Append to history after successful execution
+			queryBuilder = ""                // Reset the query builder after execution
 		}
-
-		startTime := time.Now() // Start timing the query execution
-
-		output, hasRows, affectedRows, err := executeSQL(db, query)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		printResults(output, outputFormat, hasRows, startTime, affectedRows)
 	}
 
 	if f, err := os.Create(historyFile); err != nil {
