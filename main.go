@@ -138,45 +138,75 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			continue
 		}
 
-		rows, err := db.Query(query)
+		startTime := time.Now() // Start timing the query execution
+
+		var affectedRows int64
+		var rows *sql.Rows
+
+		ok, err := isQuery(query)
 		if err != nil {
-			log.Printf("Failed to execute SQL: %v", err)
+			log.Printf("Failed to parse SQL: %v", err)
 			continue
 		}
-		defer rows.Close()
 
-		cols, err := rows.Columns()
-		if err != nil {
-			log.Printf("Failed to get column info: %v", err)
-			continue
-		}
-
-		results := make([]interface{}, len(cols))
-		pointers := make([]interface{}, len(cols))
-
-		for i := range results {
-			pointers[i] = &results[i]
-		}
-
-		var output []RowResult
-		hasRows := false
-		for rows.Next() {
-			hasRows = true
-			err := rows.Scan(pointers...)
+		if ok {
+			rows, err = db.Query(query)
 			if err != nil {
-				log.Printf("Failed to read data: %v", err)
+				log.Printf("Failed to execute SQL: %v", err)
 				continue
 			}
-			rowData := RowResult{
-				colNames:  cols,
-				colValues: make([]interface{}, len(cols)),
+			defer rows.Close()
+
+			cols, err := rows.Columns()
+			if err != nil {
+				log.Printf("Failed to get column info: %v", err)
+				continue
 			}
-			for i := range cols {
-				rowData.colValues[i] = results[i]
+
+			results := make([]interface{}, len(cols))
+			pointers := make([]interface{}, len(cols))
+
+			for i := range results {
+				pointers[i] = &results[i]
 			}
-			output = append(output, rowData)
+
+			var output []RowResult
+			hasRows := false
+			for rows.Next() {
+				hasRows = true
+				err := rows.Scan(pointers...)
+				if err != nil {
+					log.Printf("Failed to read data: %v", err)
+					continue
+				}
+				rowData := RowResult{
+					colNames:  cols,
+					colValues: make([]interface{}, len(cols)),
+				}
+				for i := range cols {
+					rowData.colValues[i] = results[i]
+				}
+				output = append(output, rowData)
+				affectedRows++ // Count the number of rows
+			}
+			printResults(output, outputFormat, hasRows)
+		} else {
+			result, err := db.Exec(query)
+			if err != nil {
+				log.Printf("Failed to execute SQL: %v", err)
+				continue
+			}
+			affectedRows, err = result.RowsAffected()
+			if err != nil {
+				log.Printf("Failed to get affected rows: %v", err)
+				continue
+			}
 		}
-		printResults(output, outputFormat, hasRows)
+
+		if showExecDetails {
+			fmt.Printf("Execution time: %s\n", time.Since(startTime))
+			fmt.Printf("Affected rows: %d\n", affectedRows)
+		}
 	}
 
 	if f, err := os.Create(historyFile); err != nil {
@@ -261,7 +291,10 @@ func getDefaultConfigFilePath() string {
 	return configFile
 }
 
-var Version = "dev"
+var (
+	Version         = "dev"
+	showExecDetails = false
+)
 
 func main() {
 	// Command-line flags
@@ -274,7 +307,10 @@ func main() {
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
 	version := flag.Bool("v", false, "Display version information")
+	verbose := flag.Bool("vv", false, "Display execution details")
 	flag.Parse()
+
+	showExecDetails = *verbose
 
 	// Load config from file if provided
 	if *configFile != "" {
