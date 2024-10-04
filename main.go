@@ -103,6 +103,62 @@ func isTerminal() bool {
 	return term.IsTerminal(fd)
 }
 
+func executeSQL(db *sql.DB, query string) ([]RowResult, bool, int64, error) {
+	var output []RowResult
+	var hasRows bool
+	var affectedRows int64
+
+	ok, err := isQuery(query)
+	if err != nil {
+		return nil, false, 0, fmt.Errorf("failed to parse SQL: %w", err)
+	}
+
+	if ok {
+		rows, err := db.Query(query)
+		if err != nil {
+			return nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return nil, false, 0, fmt.Errorf("failed to get column info: %w", err)
+		}
+
+		results := make([]interface{}, len(cols))
+		pointers := make([]interface{}, len(cols))
+		for i := range results {
+			pointers[i] = &results[i]
+		}
+
+		for rows.Next() {
+			hasRows = true
+			if err := rows.Scan(pointers...); err != nil {
+				return nil, false, 0, fmt.Errorf("failed to read data: %w", err)
+			}
+			rowData := RowResult{
+				colNames:  cols,
+				colValues: make([]interface{}, len(cols)),
+			}
+			for i := range cols {
+				rowData.colValues[i] = results[i]
+			}
+			output = append(output, rowData)
+		}
+	} else {
+		result, err := db.Exec(query)
+		if err != nil {
+			return nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
+		}
+		affectedRows, err = result.RowsAffected()
+		if err != nil {
+			return nil, false, 0, fmt.Errorf("failed to get affected rows: %w", err)
+		}
+	}
+
+	return output, hasRows, affectedRows, nil
+}
+
 func repl(db *sql.DB, outputFormat OutputFormat) {
 	line := liner.NewLiner()
 	defer func() {
@@ -140,73 +196,13 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 
 		startTime := time.Now() // Start timing the query execution
 
-		var affectedRows int64
-		var rows *sql.Rows
-
-		ok, err := isQuery(query)
+		output, hasRows, affectedRows, err := executeSQL(db, query)
 		if err != nil {
-			log.Printf("Failed to parse SQL: %v", err)
+			log.Println(err)
 			continue
 		}
 
-		if ok {
-			rows, err = db.Query(query)
-			if err != nil {
-				log.Printf("Failed to execute SQL: %v", err)
-				continue
-			}
-			defer rows.Close()
-
-			cols, err := rows.Columns()
-			if err != nil {
-				log.Printf("Failed to get column info: %v", err)
-				continue
-			}
-
-			results := make([]interface{}, len(cols))
-			pointers := make([]interface{}, len(cols))
-
-			for i := range results {
-				pointers[i] = &results[i]
-			}
-
-			var output []RowResult
-			hasRows := false
-			for rows.Next() {
-				hasRows = true
-				err := rows.Scan(pointers...)
-				if err != nil {
-					log.Printf("Failed to read data: %v", err)
-					continue
-				}
-				rowData := RowResult{
-					colNames:  cols,
-					colValues: make([]interface{}, len(cols)),
-				}
-				for i := range cols {
-					rowData.colValues[i] = results[i]
-				}
-				output = append(output, rowData)
-				affectedRows++ // Count the number of rows
-			}
-			printResults(output, outputFormat, hasRows)
-		} else {
-			result, err := db.Exec(query)
-			if err != nil {
-				log.Printf("Failed to execute SQL: %v", err)
-				continue
-			}
-			affectedRows, err = result.RowsAffected()
-			if err != nil {
-				log.Printf("Failed to get affected rows: %v", err)
-				continue
-			}
-		}
-
-		if showExecDetails {
-			fmt.Printf("Execution time: %s\n", time.Since(startTime))
-			fmt.Printf("Affected rows: %d\n", affectedRows)
-		}
+		printResults(output, outputFormat, hasRows, startTime, affectedRows)
 	}
 
 	if f, err := os.Create(historyFile); err != nil {
@@ -238,7 +234,7 @@ func formatValue(val interface{}) string {
 	}
 }
 
-func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool) {
+func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, startTime time.Time, affectedRows int64) {
 	if outputFormat == JSON {
 		jsonOutput, err := json.Marshal(output)
 		if err != nil {
@@ -276,6 +272,17 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool) {
 
 	if !hasRows && outputFormat != JSON {
 		fmt.Println("OK")
+	}
+
+	if showExecDetails {
+		fmt.Fprintf(os.Stderr, "-----\n")
+		fmt.Fprintf(os.Stderr, "Execution time: %s\n", time.Since(startTime))
+		if hasRows {
+			fmt.Fprintf(os.Stderr, "Rows in result: %d\n", len(output))
+		}
+		if affectedRows > 0 {
+			fmt.Fprintf(os.Stderr, "Affected rows: %d\n", affectedRows)
+		}
 	}
 }
 
@@ -365,36 +372,15 @@ func main() {
 
 	// Check if -e flag is provided
 	if *execSQL != "" {
-		// Execute the provided SQL statement
-		rows, err := db.Query(*execSQL)
+		startTime := time.Now() // Start timing the query execution
+
+		output, hasRows, affectedRows, err := executeSQL(db, *execSQL)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
-		defer rows.Close()
+		printResults(output, parseOutputFormat(*outputFormat), hasRows, startTime, affectedRows)
 
-		// Process and print the results
-		cols, _ := rows.Columns()
-		var output []RowResult
-		hasRows := false
-		for rows.Next() {
-			hasRows = true
-			results := make([]interface{}, len(cols))
-			pointers := make([]interface{}, len(cols))
-			for i := range results {
-				pointers[i] = &results[i]
-			}
-			rows.Scan(pointers...)
-			rowData := RowResult{
-				colNames:  cols,
-				colValues: make([]interface{}, len(cols)),
-			}
-			for i := range cols {
-				rowData.colValues[i] = results[i]
-			}
-			output = append(output, rowData)
-		}
-		printResults(output, parseOutputFormat(*outputFormat), hasRows)
-		return // Exit after executing the SQL
+		return
 	}
 	if *version {
 		if info, ok := debug.ReadBuildInfo(); ok && Version == "dev" {
