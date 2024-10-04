@@ -209,8 +209,9 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 				queryBuilder = "" // Reset the query builder
 				continue
 			}
+			execTime := time.Since(startTime)
 
-			printResults(output, outputFormat, hasRows, startTime, affectedRows)
+			printResults(output, outputFormat, hasRows, execTime, affectedRows)
 			line.AppendHistory(queryBuilder) // Append to history after successful execution
 			queryBuilder = ""                // Reset the query builder after execution
 		}
@@ -245,7 +246,7 @@ func formatValue(val interface{}) string {
 	}
 }
 
-func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, startTime time.Time, affectedRows int64) {
+func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
 	if outputFormat == JSON {
 		jsonOutput, err := json.Marshal(output)
 		if err != nil {
@@ -287,7 +288,7 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, s
 
 	if showExecDetails {
 		fmt.Fprintf(os.Stderr, "-----\n")
-		fmt.Fprintf(os.Stderr, "Execution time: %s\n", time.Since(startTime))
+		fmt.Fprintf(os.Stderr, "Execution time: %s\n", execTime)
 		if hasRows {
 			fmt.Fprintf(os.Stderr, "Rows in result: %d\n", len(output))
 		}
