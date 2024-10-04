@@ -1,4 +1,4 @@
-name: Go Build and Releases
+name: nightly-build
 
 on:
   push:
