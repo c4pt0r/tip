@@ -21,11 +21,6 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         arch: [amd64, arm64]
         go-version: [1.21.1]
-        include:
-          # Add a specific build for Raspberry Pi (ARM)
-          - os: ubuntu-latest
-            arch: arm
-            go-version: 1.21.1
 
     steps:
       - name: Checkout code
