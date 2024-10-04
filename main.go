@@ -364,7 +364,7 @@ func main() {
 		if info, ok := debug.ReadBuildInfo(); ok && Version == "dev" {
 			Version = info.Main.Version
 		}
-		fmt.Printf("TiDBCLI version %s\n", Version)
+		fmt.Printf("tip version: %s\n", Version)
 		os.Exit(0)
 	}
 	// Execute queries in REPL mode
