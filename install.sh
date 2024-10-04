@@ -44,14 +44,14 @@ else
 fi
 
 # Download the binary
-echo "Downloading TiDB CLI..."
+echo "Downloading tip..."
 $DOWNLOAD_CMD /tmp/tip "$DOWNLOAD_URL"
 
 # Make the binary executable
 chmod +x /tmp/tip
 
 # Move the binary to the installation directory
-echo "Installing TiDB CLI to $INSTALL_DIR..."
+echo "Installing tip to $INSTALL_DIR..."
 
 mkdir -p "$INSTALL_DIR"
 
@@ -65,7 +65,7 @@ fi
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "Creating config file at $CONFIG_FILE..."
   cat > "$CONFIG_FILE" << EOF
-# TiDB CLI Configuration File
+# tip Configuration File
 
 # Example configuration options:
 # host = "localhost"
@@ -81,7 +81,7 @@ else
   echo "Config file already exists at $CONFIG_FILE. Skipping creation."
 fi
 
-echo "TiDB CLI has been successfully installed!"
+echo "tip has been successfully installed!"
 echo "You can now use it by running 'tip' from the command line."
 echo "Make sure to edit your config file at $CONFIG_FILE with your TiDB connection details."
 echo "You can also add it to your PATH by running 'export PATH=\$PATH:$INSTALL_DIR'"
