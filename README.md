@@ -1,5 +1,7 @@
 # tip 🧰
 
+[![nightly-build](https://github.com/c4pt0r/tip/actions/workflows/ci.yml/badge.svg)](https://github.com/c4pt0r/tip/actions/workflows/ci.yml)
+
 `tip` is the Swiss Knife for interacting with TiDB databases (especially for TiDB Serverless) in your shell workflow. It provides a user-friendly way to connect to TiDB servers, execute queries, and view results in various formats.
 
 A quick look 👀：
