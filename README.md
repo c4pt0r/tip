@@ -1,6 +1,14 @@
-# TiDB CLI
+# TiDB CLI 🧰
 
-TiDB CLI is a command-line interface tool for interacting with TiDB databases (Serverless). It provides a user-friendly way to connect to TiDB servers, execute queries, and view results in various formats.
+TiDB CLI is the Swiss Knife for interacting with TiDB databases (especially Serverless) in your shell workflow. It provides a user-friendly way to connect to TiDB servers, execute queries, and view results in various formats.
+
+A quick look 👀：
+
+```
+echo 'source\nstatus' | parallel \
+'./tidb-cli -o json -e "SELECT COUNT(*) as count FROM {}" | \
+jq -r ".[] | \"\(.count) records in {} table\""'
+```
 
 ## Installation
 
