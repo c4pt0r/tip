@@ -1,6 +1,6 @@
-# TiDB CLI 🧰
+# tip 🧰
 
-TiDB CLI is the Swiss Knife for interacting with TiDB databases (especially Serverless) in your shell workflow. It provides a user-friendly way to connect to TiDB servers, execute queries, and view results in various formats.
+`tip` is the Swiss Knife for interacting with TiDB databases (especially for TiDB Serverless) in your shell workflow. It provides a user-friendly way to connect to TiDB servers, execute queries, and view results in various formats.
 
 A quick look 👀：
 
@@ -16,6 +16,8 @@ To install TiDB CLI, make sure you have Go installed on your system, then run:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
+
+vim ~/.tip/config.toml
 ```
 
 ## Configuration
