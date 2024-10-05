@@ -14,10 +14,20 @@ jq -r ".[] | \"\(.count) records in {} table\""'
 
 ## Installation
 
+Install:
+
 ```
 curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
 ```
 
+Configuration:
+
+```
+vim ~/.tip/config.toml
+# More details in Configuration part 
+```
+
+Try it:
 ```
 export PATH=$PATH:~/.tip/bin
 tip -h 127.0.0.1 -p 4000 -u root -P "" -d test -e "select tidb_version();" -o json
