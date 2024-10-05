@@ -14,8 +14,6 @@ jq -r ".[] | \"\(.count) records in {} table\""'
 
 ## Installation
 
-To install tip, make sure you have Go installed on your system, then run:
-
 ```
 curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
 ```
