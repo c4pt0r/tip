@@ -328,8 +328,8 @@ func main() {
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
-	version := flag.Bool("v", false, "Display version information")
-	verbose := flag.Bool("vv", false, "Display execution details")
+	version := flag.Bool("V", false, "Display version information")
+	verbose := flag.Bool("v", false, "Display execution details")
 	flag.Parse()
 
 	showExecDetails = *verbose

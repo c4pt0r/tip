@@ -7,7 +7,7 @@
 A quick look 👀：
 
 ```
-echo 'source\nstatus' | parallel \
+echo 'table1\table2\ntable3' | parallel \
 './tip -o json -e "SELECT COUNT(*) as count FROM {}" | \
 jq -r ".[] | \"\(.count) records in {} table\""'
 ```
@@ -70,6 +70,9 @@ Flags:
 - `-d`: TiDB database (default: "test")
 - `-c`: Path to configuration file
 - `-o`: Output format: plain, table(default), or json
+- `-e`: SQL query to execute
+- `-v`: Verbose mode
+- `-V`: Print version and exit
 
 Example:
 
