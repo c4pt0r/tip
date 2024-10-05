@@ -91,11 +91,11 @@ Once connected, you'll be in an interactive REPL where you can enter SQL queries
 ## How to get connection info?
 
 1. Go to [TiDB Cloud](https://tidbcloud.com/), login with your TiDB Cloud account
-    1.1 Create a new cluster (TiDB Serverless) if you don't have one
-2. Click on your cluster
-3. Click on `Connect` button on the right top corner
-4. Copy the connection info to your config file or environment variables
-5. Enjoy 🚀
+2. (Optional) Create a new cluster (TiDB Serverless) if you don't have one
+3. Click on your cluster
+4. Click on `Connect` button on the right top corner
+5. Copy the connection info to your config file or environment variables
+6. Enjoy 🚀
 
 ## Output Formats
 
