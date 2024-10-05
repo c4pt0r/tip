@@ -66,21 +66,21 @@ tip [flags]
 
 Flags:
 
-- `-h`: TiDB Serverless hostname (default: "127.0.0.1")
-- `-p`: TiDB port (default: "4000")
-- `-u`: TiDB username (default: "root")
-- `-P`: TiDB password
-- `-d`: TiDB database (default: "test")
-- `-c`: Path to configuration file
-- `-o`: Output format: plain, table(default), or json
-- `-e`: SQL query to execute
-- `-v`: Verbose mode
-- `-V`: Print version and exit
+- `-host`: TiDB Serverless hostname
+- `-port`: TiDB port
+- `-u`: TiDB username
+- `-p`: TiDB password
+- `-d`: TiDB database
+- `-c`: Path to configuration file (default: `~/.tip/config.toml`)
+- `-o`: Output format: plain, table (default), or json
+- `-e`: Execute SQL statement and exit
+- `-v`: Display execution details
+- `-version`: Display version information
 
 Example:
 
 ```
-tip -h mytidbserver.com -p 4000 -u myuser -P mypassword -d mydatabase
+tip -host mytidbserver.com -port 4000 -u myuser -p mypassword -d mydatabase
 ```
 
 Once connected, you'll be in an interactive REPL where you can enter SQL queries.

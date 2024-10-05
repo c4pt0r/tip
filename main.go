@@ -338,15 +338,15 @@ var (
 
 func main() {
 	// Command-line flags
-	host := flag.String("h", "", "TiDB Serverless hostname")
-	port := flag.String("p", "", "TiDB port")
+	host := flag.String("host", "", "TiDB Serverless hostname")
+	port := flag.String("port", "", "TiDB port")
 	user := flag.String("u", "", "TiDB username")
-	pass := flag.String("P", "", "TiDB password")
+	pass := flag.String("p", "", "TiDB password")
 	dbName := flag.String("d", "", "TiDB database")
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
-	version := flag.Bool("V", false, "Display version information")
+	version := flag.Bool("version", false, "Display version information")
 	verbose := flag.Bool("v", false, "Display execution details")
 	flag.Parse()
 
