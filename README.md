@@ -18,6 +18,9 @@ To install tip, make sure you have Go installed on your system, then run:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/c4pt0r/tip/refs/heads/master/install.sh | sh
+```
+
+```
 export PATH=$PATH:~/.tip/bin
 tip -h 127.0.0.1 -p 4000 -u root -P "" -d test -e "select tidb_version();" -o json
 ```
