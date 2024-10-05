@@ -63,10 +63,7 @@ func loadConfigFromFile(configPath string) (map[string]string, error) {
 
 // Load configuration from environment variables or .env file
 func loadConfigFromEnv() (string, string, string, string, string, error) {
-	err := godotenv.Load(".env") // Optionally load .env file
-	if err != nil {
-		log.Println("No .env file found")
-	}
+	godotenv.Load(".env") // Optionally load .env file
 	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")
 	user := os.Getenv("DB_USERNAME")
