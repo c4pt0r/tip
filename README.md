@@ -25,6 +25,36 @@ export PATH=$PATH:~/.tip/bin
 tip -h 127.0.0.1 -p 4000 -u root -P "" -d test -e "select tidb_version();" -o json
 ```
 
+
+## Usage
+
+Basic usage:
+
+```
+tip [flags]
+```
+
+Flags:
+
+- `-host`: TiDB Serverless hostname
+- `-port`: TiDB port
+- `-u`: TiDB username
+- `-p`: TiDB password
+- `-d`: TiDB database
+- `-c`: Path to configuration file (default: `~/.tip/config.toml`)
+- `-o`: Output format: plain, table (default), or json
+- `-e`: Execute SQL statement and exit
+- `-v`: Display execution details
+- `-version`: Display version information
+
+Example:
+
+```
+tip -host mytidbserver.com -port 4000 -u myuser -p mypassword -d mydatabase
+```
+
+or use configuration file / environment variables:
+
 ## Configuration
 
 tip can be configured in multiple ways:
@@ -56,34 +86,16 @@ You can also set the following environment variables:
 - `DB_PASSWORD`
 - `DB_DATABASE`
 
-## Usage
-
-Basic usage:
-
-```
-tip [flags]
-```
-
-Flags:
-
-- `-host`: TiDB Serverless hostname
-- `-port`: TiDB port
-- `-u`: TiDB username
-- `-p`: TiDB password
-- `-d`: TiDB database
-- `-c`: Path to configuration file (default: `~/.tip/config.toml`)
-- `-o`: Output format: plain, table (default), or json
-- `-e`: Execute SQL statement and exit
-- `-v`: Display execution details
-- `-version`: Display version information
-
-Example:
-
-```
-tip -host mytidbserver.com -port 4000 -u myuser -p mypassword -d mydatabase
-```
-
 Once connected, you'll be in an interactive REPL where you can enter SQL queries.
+
+## How to get connection info?
+
+1. Go to [TiDB Cloud](https://tidbcloud.com/), login with your TiDB Cloud account
+    1.1 Create a new cluster (TiDB Serverless) if you don't have one
+2. Click on your cluster
+3. Click on `Connect` button on the right top corner
+4. Copy the connection info to your config file or environment variables
+5. Enjoy 🚀
 
 ## Output Formats
 
