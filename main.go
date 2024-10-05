@@ -28,10 +28,11 @@ const (
 	Plain OutputFormat = iota
 	JSON
 	Table
+	CSV
 )
 
 func (f OutputFormat) String() string {
-	return [...]string{"plain", "json", "table"}[f]
+	return [...]string{"plain", "json", "table", "csv"}[f]
 }
 
 func parseOutputFormat(format string) OutputFormat {
@@ -40,6 +41,8 @@ func parseOutputFormat(format string) OutputFormat {
 		return JSON
 	case "table":
 		return Table
+	case "csv":
+		return CSV
 	default:
 		return Plain
 	}
@@ -200,11 +203,12 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		}
 
 		trimmedInput := strings.TrimSpace(input)
-		queryBuilder += input + " "
+		queryBuilder += input + "\n"
 
 		// Check if the trimmed input ends with a semicolon
 		if len(trimmedInput) > 0 && trimmedInput[len(trimmedInput)-1] == ';' {
 			startTime := time.Now() // Start timing the query execution
+			queryBuilder = strings.TrimSpace(queryBuilder)
 			line.AppendHistory(queryBuilder)
 			isQ, output, hasRows, affectedRows, err := executeSQL(db, queryBuilder)
 			if err != nil {
@@ -247,6 +251,27 @@ func formatValue(val interface{}) string {
 	}
 }
 
+func formatCSVValue(val interface{}) string {
+	switch v := val.(type) {
+	case nil:
+		return ""
+	case bool:
+		return fmt.Sprintf("%t", v)
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+	case float64:
+		return fmt.Sprintf("%f", v)
+	case string:
+		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(v, "\"", "\"\""))
+	case []byte:
+		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(string(v), "\"", "\"\""))
+	case time.Time:
+		return fmt.Sprintf("\"%s\"", v.Format("2006-01-02 15:04:05"))
+	default:
+		return fmt.Sprintf("\"%v\"", v)
+	}
+}
+
 func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
 	if outputFormat == JSON {
 		if len(output) == 0 {
@@ -279,27 +304,47 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			}
 			fmt.Println()
 		}
-	} else if outputFormat == Table {
+	} else if outputFormat == Table || outputFormat == CSV {
 		if len(output) == 0 {
 			if !isQ {
-				fmt.Println("OK, affected_rows:", affectedRows)
+				if outputFormat == Table {
+					fmt.Println("OK, affected_rows:", affectedRows)
+				} else { // CSV
+					fmt.Printf("status,affected_rows\nOK,%d\n", affectedRows)
+				}
 			} else {
-				fmt.Println("(empty result)")
+				if outputFormat == Table {
+					fmt.Println("(empty result)")
+				} else { // CSV
+					fmt.Println("(empty result)")
+				}
 			}
 			goto I
 		}
 		cols := output[0].colNames
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader(cols)
-		for _, row := range output {
-			rowData := make([]string, len(cols))
-			for i := range cols {
-				val := row.colValues[i]
-				rowData[i] = formatValue(val)
+		if outputFormat == Table {
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetHeader(cols)
+			for _, row := range output {
+				rowData := make([]string, len(cols))
+				for i := range cols {
+					val := row.colValues[i]
+					rowData[i] = formatValue(val)
+				}
+				table.Append(rowData)
 			}
-			table.Append(rowData)
+			table.Render()
+		} else { // CSV
+			fmt.Println(strings.Join(cols, ","))
+			for _, row := range output {
+				rowData := make([]string, len(cols))
+				for i := range cols {
+					val := row.colValues[i]
+					rowData[i] = formatCSVValue(val)
+				}
+				fmt.Println(strings.Join(rowData, ","))
+			}
 		}
-		table.Render()
 	} else {
 		log.Fatal("Invalid output format: " + outputFormat.String())
 	}

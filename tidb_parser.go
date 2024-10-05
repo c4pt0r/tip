@@ -25,6 +25,8 @@ func isQueryStmt(stmt ast.StmtNode) bool {
 	// Txn
 	case *ast.BeginStmt, *ast.CommitStmt, *ast.RollbackStmt:
 		return false
+	case *ast.UseStmt, *ast.SetStmt:
+		return false
 	default:
 		return true
 	}
