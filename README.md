@@ -8,8 +8,7 @@ A quick look 👀：
 
 ```
 echo 'table1\table2\ntable3' | parallel \
-'./tip -o json -e "SELECT COUNT(*) as count FROM {}" | \
-jq -r ".[] | \"\(.count) records in {} table\""'
+'./tip -o json -e "SELECT COUNT(*) as count FROM {}" | jq -r ".[] | \"\(.count) records in {} table\""'
 ```
 
 ## Installation
