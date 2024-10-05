@@ -104,26 +104,26 @@ func isTerminal() bool {
 	return term.IsTerminal(fd)
 }
 
-func executeSQL(db *sql.DB, query string) ([]RowResult, bool, int64, error) {
+func executeSQL(db *sql.DB, query string) (bool, []RowResult, bool, int64, error) {
 	var output []RowResult
 	var hasRows bool
 	var affectedRows int64
 
-	ok, err := isQuery(query)
+	isQ, err := isQuery(query)
 	if err != nil {
-		return nil, false, 0, fmt.Errorf("failed to parse SQL: %w", err)
+		return false, nil, false, 0, fmt.Errorf("failed to parse SQL: %w", err)
 	}
 
-	if ok {
+	if isQ {
 		rows, err := db.Query(query)
 		if err != nil {
-			return nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
+			return false, nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
 		}
 		defer rows.Close()
 
 		cols, err := rows.Columns()
 		if err != nil {
-			return nil, false, 0, fmt.Errorf("failed to get column info: %w", err)
+			return false, nil, false, 0, fmt.Errorf("failed to get column info: %w", err)
 		}
 
 		results := make([]interface{}, len(cols))
@@ -135,7 +135,7 @@ func executeSQL(db *sql.DB, query string) ([]RowResult, bool, int64, error) {
 		for rows.Next() {
 			hasRows = true
 			if err := rows.Scan(pointers...); err != nil {
-				return nil, false, 0, fmt.Errorf("failed to read data: %w", err)
+				return false, nil, false, 0, fmt.Errorf("failed to read data: %w", err)
 			}
 			rowData := RowResult{
 				colNames:  cols,
@@ -149,18 +149,21 @@ func executeSQL(db *sql.DB, query string) ([]RowResult, bool, int64, error) {
 	} else {
 		result, err := db.Exec(query)
 		if err != nil {
-			return nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
+			return false, nil, false, 0, fmt.Errorf("failed to execute SQL: %w", err)
 		}
 		affectedRows, err = result.RowsAffected()
 		if err != nil {
-			return nil, false, 0, fmt.Errorf("failed to get affected rows: %w", err)
+			return false, nil, false, 0, fmt.Errorf("failed to get affected rows: %w", err)
 		}
 	}
 
-	return output, hasRows, affectedRows, nil
+	return isQ, output, hasRows, affectedRows, nil
 }
 
 func repl(db *sql.DB, outputFormat OutputFormat) {
+	if isTerminal() {
+		showExecDetails = true
+	}
 	line := liner.NewLiner()
 	defer func() {
 		line.Close()
@@ -190,7 +193,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			if queryBuilder == "" {
 				prompt = fmt.Sprintf("%s> ", curDB)
 			} else {
-				prompt = fmt.Sprintf("%s>> ", curDB)
+				prompt = fmt.Sprintf("%s>>> ", curDB)
 			}
 		}
 
@@ -205,18 +208,16 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		// Check if the trimmed input ends with a semicolon
 		if len(trimmedInput) > 0 && trimmedInput[len(trimmedInput)-1] == ';' {
 			startTime := time.Now() // Start timing the query execution
-
-			output, hasRows, affectedRows, err := executeSQL(db, queryBuilder)
+			line.AppendHistory(queryBuilder)
+			isQ, output, hasRows, affectedRows, err := executeSQL(db, queryBuilder)
 			if err != nil {
 				log.Println(err)
 				queryBuilder = "" // Reset the query builder
 				continue
 			}
 			execTime := time.Since(startTime)
-
-			printResults(output, outputFormat, hasRows, execTime, affectedRows)
-			line.AppendHistory(queryBuilder) // Append to history after successful execution
-			queryBuilder = ""                // Reset the query builder after execution
+			printResults(isQ, output, outputFormat, hasRows, execTime, affectedRows)
+			queryBuilder = "" // Reset the query builder after execution
 		}
 	}
 
@@ -249,8 +250,16 @@ func formatValue(val interface{}) string {
 	}
 }
 
-func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
+func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
 	if outputFormat == JSON {
+		if len(output) == 0 {
+			if !isQ {
+				fmt.Println("{\"status\": \"OK\", \"affected_rows\": " + fmt.Sprintf("%d", affectedRows) + "}")
+			} else {
+				fmt.Println("[]")
+			}
+			goto I
+		}
 		jsonOutput, err := json.Marshal(output)
 		if err != nil {
 			log.Printf("Failed to marshal JSON: %v", err)
@@ -258,6 +267,14 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, e
 		}
 		fmt.Println(string(jsonOutput))
 	} else if outputFormat == Plain {
+		if len(output) == 0 {
+			if !isQ {
+				fmt.Println("OK, affected_rows:", affectedRows)
+			} else {
+				fmt.Println("(empty result)")
+			}
+			goto I
+		}
 		for _, row := range output {
 			for i, col := range row.colNames {
 				val := row.colValues[i]
@@ -267,7 +284,12 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, e
 		}
 	} else if outputFormat == Table {
 		if len(output) == 0 {
-			return
+			if !isQ {
+				fmt.Println("OK, affected_rows:", affectedRows)
+			} else {
+				fmt.Println("(empty result)")
+			}
+			goto I
 		}
 		cols := output[0].colNames
 		table := tablewriter.NewWriter(os.Stdout)
@@ -284,11 +306,7 @@ func printResults(output []RowResult, outputFormat OutputFormat, hasRows bool, e
 	} else {
 		log.Fatal("Invalid output format: " + outputFormat.String())
 	}
-
-	if !hasRows && outputFormat != JSON {
-		fmt.Println("OK")
-	}
-
+I:
 	if showExecDetails {
 		fmt.Fprintf(os.Stderr, "-----\n")
 		fmt.Fprintf(os.Stderr, "Execution time: %s\n", execTime)
@@ -320,11 +338,11 @@ var (
 
 func main() {
 	// Command-line flags
-	host := flag.String("h", "127.0.0.1", "TiDB Serverless hostname")
-	port := flag.String("p", "4000", "TiDB port")
-	user := flag.String("u", "root", "TiDB username")
+	host := flag.String("h", "", "TiDB Serverless hostname")
+	port := flag.String("p", "", "TiDB port")
+	user := flag.String("u", "", "TiDB username")
 	pass := flag.String("P", "", "TiDB password")
-	dbName := flag.String("d", "test", "TiDB database")
+	dbName := flag.String("d", "", "TiDB database")
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
@@ -334,37 +352,47 @@ func main() {
 
 	showExecDetails = *verbose
 
+	// Load config from environment variables
+	envHost, envPort, envUser, envPass, defaultDatabase, _ := loadConfigFromEnv()
+
 	// Load config from file if provided
 	if *configFile != "" {
 		config, err := loadConfigFromFile(*configFile)
 		if err != nil {
 			log.Fatalf("Failed to read config file: %v", err)
 		}
-		*host = config["host"]
-		*port = config["port"]
-		*user = config["user"]
-		*pass = config["password"]
-		*dbName = config["database"]
-	} else {
-		// Otherwise, try loading from environment variables
-		envHost, envPort, envUser, envPass, defaultDatabase, err := loadConfigFromEnv()
-		if err == nil {
-			if envHost != "" {
-				*host = envHost
-			}
-			if envPort != "" {
-				*port = envPort
-			}
-			if envUser != "" {
-				*user = envUser
-			}
-			if envPass != "" {
-				*pass = envPass
-			}
-			if defaultDatabase != "" {
-				*dbName = defaultDatabase
-			}
+		if *host == "" && config["host"] != "" {
+			*host = config["host"]
 		}
+		if *port == "" && config["port"] != "" {
+			*port = config["port"]
+		}
+		if *user == "" && config["user"] != "" {
+			*user = config["user"]
+		}
+		if *pass == "" && config["password"] != "" {
+			*pass = config["password"]
+		}
+		if *dbName == "" && config["database"] != "" {
+			*dbName = config["database"]
+		}
+	}
+
+	// Use environment variables if command line and config file are not set
+	if *host == "" {
+		*host = envHost
+	}
+	if *port == "" {
+		*port = envPort
+	}
+	if *user == "" {
+		*user = envUser
+	}
+	if *pass == "" {
+		*pass = envPass
+	}
+	if *dbName == "" {
+		*dbName = defaultDatabase
 	}
 
 	mysql.RegisterTLSConfig("tidb", &tls.Config{
@@ -385,17 +413,21 @@ func main() {
 	db.SetMaxOpenConns(100)
 	db.SetMaxIdleConns(100)
 
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping TiDB: %v", err)
+	}
+
 	// Check if -e flag is provided
 	if *execSQL != "" {
 		startTime := time.Now() // Start timing the query execution
 
-		output, hasRows, affectedRows, err := executeSQL(db, *execSQL)
+		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
 
 		execTime := time.Since(startTime)
-		printResults(output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
+		printResults(isQ, output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
 
 		return
 	}
@@ -406,6 +438,5 @@ func main() {
 		fmt.Printf("tip version: %s\n", Version)
 		os.Exit(0)
 	}
-	// Execute queries in REPL mode
 	repl(db, parseOutputFormat(*outputFormat))
 }
