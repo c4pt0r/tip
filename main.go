@@ -3,9 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -46,6 +48,25 @@ func parseOutputFormat(format string) OutputFormat {
 	default:
 		return Plain
 	}
+}
+
+type ResultIOWriter interface {
+	Write(rows []RowResult) error
+	Flush() error
+}
+
+type CSVResultIOWriter struct {
+	writer *csv.Writer
+}
+
+func NewCSVResultIOWriter(writer io.Writer) *CSVResultIOWriter {
+	return &CSVResultIOWriter{
+		writer: csv.NewWriter(writer),
+	}
+}
+
+func (w *CSVResultIOWriter) Write(rows []RowResult) error {
+	return nil
 }
 
 // Load configuration from a file
@@ -104,7 +125,7 @@ func isTerminal() bool {
 	return term.IsTerminal(fd)
 }
 
-func executeSQL(db *sql.DB, query string) (bool, []RowResult, bool, int64, error) {
+func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, []RowResult, bool, int64, error) {
 	var output []RowResult
 	var hasRows bool
 	var affectedRows int64
@@ -144,7 +165,12 @@ func executeSQL(db *sql.DB, query string) (bool, []RowResult, bool, int64, error
 			for i := range cols {
 				rowData.colValues[i] = results[i]
 			}
-			output = append(output, rowData)
+			if resultIOWriter != nil {
+				// TODO
+			} else {
+				output = append(output, rowData)
+			}
+
 		}
 	} else {
 		result, err := db.Exec(query)
@@ -210,7 +236,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			startTime := time.Now() // Start timing the query execution
 			queryBuilder = strings.TrimSpace(queryBuilder)
 			line.AppendHistory(queryBuilder)
-			isQ, output, hasRows, affectedRows, err := executeSQL(db, queryBuilder)
+			isQ, output, hasRows, affectedRows, err := executeSQL(db, queryBuilder, nil)
 			if err != nil {
 				log.Println(err)
 				queryBuilder = "" // Reset the query builder
@@ -462,8 +488,7 @@ func main() {
 	// Check if -e flag is provided
 	if *execSQL != "" {
 		startTime := time.Now() // Start timing the query execution
-
-		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL)
+		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, nil)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
