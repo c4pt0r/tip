@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/tls"
 	"database/sql"
 	"encoding/csv"
@@ -66,7 +67,102 @@ func NewCSVResultIOWriter(writer io.Writer) *CSVResultIOWriter {
 }
 
 func (w *CSVResultIOWriter) Write(rows []RowResult) error {
+	for _, row := range rows {
+		record := make([]string, len(row.colValues))
+		for i, val := range row.colValues {
+			record[i] = formatCSVValue(val)
+		}
+		if err := w.writer.Write(record); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (w *CSVResultIOWriter) Flush() error {
+	w.writer.Flush()
+	return w.writer.Error()
+}
+
+type PlainResultIOWriter struct {
+	writer *bufio.Writer
+}
+
+func NewPlainResultIOWriter(writer io.Writer) *PlainResultIOWriter {
+	return &PlainResultIOWriter{
+		writer: bufio.NewWriter(writer),
+	}
+}
+
+func (w *PlainResultIOWriter) Write(rows []RowResult) error {
+	for _, row := range rows {
+		for i, col := range row.colNames {
+			val := row.colValues[i]
+			_, err := fmt.Fprintf(w.writer, "%s: %s ", col, formatValue(val))
+			if err != nil {
+				return err
+			}
+		}
+		_, err := w.writer.WriteString("\n")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *PlainResultIOWriter) Flush() error {
+	return w.writer.Flush()
+}
+
+type JSONResultIOWriter struct {
+	writer *bufio.Writer
+	first  bool
+}
+
+func NewJSONResultIOWriter(writer io.Writer) *JSONResultIOWriter {
+	return &JSONResultIOWriter{
+		writer: bufio.NewWriter(writer),
+		first:  true,
+	}
+}
+
+func (w *JSONResultIOWriter) Write(rows []RowResult) error {
+	for _, row := range rows {
+		if w.first {
+			_, err := w.writer.WriteString("[")
+			if err != nil {
+				return err
+			}
+			w.first = false
+		} else {
+			_, err := w.writer.WriteString(",")
+			if err != nil {
+				return err
+			}
+		}
+
+		jsonData, err := json.Marshal(row)
+		if err != nil {
+			return err
+		}
+
+		_, err = w.writer.Write(jsonData)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *JSONResultIOWriter) Flush() error {
+	if !w.first {
+		_, err := w.writer.WriteString("]")
+		if err != nil {
+			return err
+		}
+	}
+	return w.writer.Flush()
 }
 
 // Load configuration from a file
@@ -166,7 +262,9 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 				rowData.colValues[i] = results[i]
 			}
 			if resultIOWriter != nil {
-				// TODO
+				if err := resultIOWriter.Write([]RowResult{rowData}); err != nil {
+					return false, nil, false, 0, fmt.Errorf("failed to write data: %w", err)
+				}
 			} else {
 				output = append(output, rowData)
 			}
@@ -416,6 +514,7 @@ func main() {
 	execSQL := flag.String("e", "", "Execute SQL statement and exit")
 	version := flag.Bool("version", false, "Display version information")
 	verbose := flag.Bool("v", false, "Display execution details")
+	outputFile := flag.String("O", "", "Output file for results")
 	flag.Parse()
 
 	showExecDetails = *verbose
@@ -485,16 +584,39 @@ func main() {
 		log.Fatalf("Failed to ping TiDB: %v", err)
 	}
 
+	var resultIOWriter ResultIOWriter
+	if *outputFile != "" {
+		file, err := os.Create(*outputFile)
+		if err != nil {
+			log.Fatalf("Failed to create output file: %v", err)
+		}
+		defer file.Close()
+
+		bufferedWriter := bufio.NewWriter(file)
+		switch parseOutputFormat(*outputFormat) {
+		case CSV:
+			resultIOWriter = NewCSVResultIOWriter(bufferedWriter)
+		case Plain:
+			resultIOWriter = NewPlainResultIOWriter(bufferedWriter)
+		case JSON:
+			resultIOWriter = NewJSONResultIOWriter(bufferedWriter)
+		}
+	}
+
 	// Check if -e flag is provided
 	if *execSQL != "" {
 		startTime := time.Now() // Start timing the query execution
-		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, nil)
+		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, resultIOWriter)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
 
-		execTime := time.Since(startTime)
-		printResults(isQ, output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
+		if resultIOWriter != nil {
+			resultIOWriter.Flush()
+		} else {
+			execTime := time.Since(startTime)
+			printResults(isQ, output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
+		}
 
 		return
 	}
