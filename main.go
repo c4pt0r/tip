@@ -329,6 +329,13 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		trimmedInput := strings.TrimSpace(input)
 		queryBuilder += input + "\n"
 
+		// Check if input is from a pipe and ends with a semicolon
+		if !isTerminal() && (len(trimmedInput) == 0 || trimmedInput[len(trimmedInput)-1] != ';') {
+			log.Println("Error: Input from pipe must end with a semicolon.")
+			queryBuilder = "" // Reset the query builder
+			continue
+		}
+
 		// Check if the trimmed input ends with a semicolon
 		if len(trimmedInput) > 0 && trimmedInput[len(trimmedInput)-1] == ';' {
 			startTime := time.Now() // Start timing the query execution
