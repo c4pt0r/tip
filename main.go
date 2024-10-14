@@ -17,8 +17,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-	"github.com/olekukonko/tablewriter"
 	"github.com/pelletier/go-toml"
+	"github.com/shenwei356/stable"
 	"github.com/peterh/liner"
 	"golang.org/x/term"
 )
@@ -319,53 +319,53 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			}
 			fmt.Println()
 		}
-	} else if outputFormat == Table || outputFormat == CSV {
+	} else if outputFormat == Table {
 		if len(output) == 0 {
 			if !isQ {
-				if outputFormat == Table {
-					fmt.Println("OK, affected_rows:", affectedRows)
-				} else { // CSV
-					fmt.Printf("status,affected_rows\nOK,%d\n", affectedRows)
-				}
+				fmt.Println("OK, affected_rows:", affectedRows)
 			} else {
-				if outputFormat == Table {
-					fmt.Println("(empty result)")
-				} else { // CSV
-					fmt.Println("(empty result)")
-				}
+				fmt.Println("(empty result)")
 			}
 			goto I
 		}
 		cols := output[0].colNames
-		if outputFormat == Table {
-			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader(cols)
-			for _, row := range output {
-				rowData := make([]string, len(cols))
-				for i := range cols {
-					val := row.colValues[i]
-					rowData[i] = formatValue(val)
-				}
-				table.Append(rowData)
+		tbl := stable.New().MaxWidth(80)
+		tbl.Writer(os.Stdout, 10)
+		tbl.Header(cols)
+		tbl.Style(stable.StyleLight)
+		for _, row := range output {
+			rowData := make([]interface{}, len(cols))
+			for i := range cols {
+				val := row.colValues[i]
+				rowData[i] = formatValue(val)
 			}
-			table.Render()
-		} else { // CSV
-			fmt.Println(strings.Join(cols, ","))
-			for _, row := range output {
-				rowData := make([]string, len(cols))
-				for i := range cols {
-					val := row.colValues[i]
-					rowData[i] = formatCSVValue(val)
-				}
-				fmt.Println(strings.Join(rowData, ","))
+			tbl.AddRow(rowData)
+		}
+		tbl.Flush()
+	} else if outputFormat == CSV {
+		if len(output) == 0 {
+			if !isQ {
+				fmt.Printf("status,affected_rows\nOK,%d\n", affectedRows)
+			} else {
+				fmt.Println("(empty result)")
 			}
+			goto I
+		}
+		cols := output[0].colNames
+		fmt.Println(strings.Join(cols, ","))
+		for _, row := range output {
+			rowData := make([]string, len(cols))
+			for i := range cols {
+				val := row.colValues[i]
+				rowData[i] = formatCSVValue(val)
+			}
+			fmt.Println(strings.Join(rowData, ","))
 		}
 	} else {
 		log.Fatal("Invalid output format: " + outputFormat.String())
 	}
 I:
 	if showExecDetails {
-		fmt.Fprintf(os.Stderr, "-----\n")
 		fmt.Fprintf(os.Stderr, "Execution time: %s\n", execTime)
 		if hasRows {
 			fmt.Fprintf(os.Stderr, "Rows in result: %d\n", len(output))
