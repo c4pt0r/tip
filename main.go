@@ -202,13 +202,19 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			log.Println(err)
 			return
 		}
+		cols, err := getAllColumnNames(db, curDB)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
 		words := strings.Fields(line[:pos])
 		lastWord := ""
 		if len(words) > 0 {
 			lastWord = strings.ToLower(words[len(words)-1])
 		}
 
-		for _, item := range append(databases, tables...) {
+		for _, item := range append(databases, append(tables, cols...)...) {
 			if strings.HasPrefix(strings.ToLower(item), lastWord) {
 				completions = append(completions, item)
 			}
