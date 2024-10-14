@@ -440,6 +440,26 @@ var (
 	showExecDetails = false
 )
 
+func greeting(db *sql.DB) {
+	var clientInfo string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		clientInfo = fmt.Sprintf("tip version: %s", info.Main.Version)
+	}
+	log.Println(clientInfo)
+
+	var info string
+	err := db.QueryRow("SELECT tidb_version()").Scan(&info)
+	if err != nil {
+		log.Printf("Failed to get server info: %v", err)
+		return
+	}
+	log.Println("------ server info ------")
+	for _, line := range strings.Split(info, "\n") {
+		log.Println(line)
+	}
+	log.Println("-------------------------")
+}
+
 func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	var db *sql.DB
 	var err error
@@ -468,13 +488,6 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	}
 
 	log.Println("Connected!")
-	var info string
-	db.QueryRow("SELECT tidb_version()").Scan(&info)
-	log.Println("--- server info ---")
-	for _, line := range strings.Split(info, "\n") {
-		log.Println(line)
-	}
-	log.Println("-------------------")
 	return db, nil
 }
 
@@ -568,6 +581,7 @@ func main() {
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Failed to ping TiDB: %v", err)
 	}
+	greeting(db)
 
 	var resultIOWriter ResultIOWriter
 	if *outputFile != "" {

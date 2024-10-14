@@ -13,8 +13,7 @@ var (
 )
 
 var KEYWORDS = []string{
-	"USE",
-	"SELECT", "FROM", "WHERE", "JOIN", "ON", "GROUP BY", "ORDER BY",
+	"USE", "SELECT", "FROM", "WHERE", "JOIN", "ON", "GROUP BY", "ORDER BY",
 	"LIMIT", "OFFSET", "AS", "IS", "NULL", "NOT", "IN", "BETWEEN", "LIKE",
 	"SHOW", "DATABASES", "TABLES", "COLUMNS", "INDEXES", "STATISTICS",
 	"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "GRANT", "REVOKE",
@@ -62,23 +61,6 @@ func getTableNames(db *sql.DB, dbName string) ([]string, error) {
 	}
 	cachedTableNames[dbName] = tables
 	return tables, nil
-}
-
-func getColumnNames(db *sql.DB, dbName, tableName string) ([]string, error) {
-	rows, err := db.Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?", tableName, dbName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var columnNames []string
-	for rows.Next() {
-		var columnName string
-		if err := rows.Scan(&columnName); err == nil {
-			columnNames = append(columnNames, columnName)
-		}
-	}
-	return columnNames, nil
 }
 
 func getAllColumnNames(db *sql.DB, dbName string) ([]string, error) {
