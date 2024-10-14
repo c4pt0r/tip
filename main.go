@@ -18,8 +18,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"github.com/pelletier/go-toml"
-	"github.com/shenwei356/stable"
 	"github.com/peterh/liner"
+	"github.com/shenwei356/stable"
 	"golang.org/x/term"
 )
 
@@ -178,6 +178,8 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		// show cursor
 		fmt.Print("\033[?25h")
 	}()
+
+	var curDB string
 	historyFile := filepath.Join(os.Getenv("HOME"), ".tip/history")
 	// ensure directory exists
 	if _, err := os.Stat(historyFile); os.IsNotExist(err) {
@@ -189,11 +191,42 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 	}
 
 	var queryBuilder string
+	completer := func(line string, pos int) (head string, completions []string, tail string) {
+		databases, err := getDatabases(db)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		tables, err := getTableNames(db, curDB)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		words := strings.Fields(line[:pos])
+		lastWord := ""
+		if len(words) > 0 {
+			lastWord = strings.ToLower(words[len(words)-1])
+		}
+
+		for _, item := range append(databases, tables...) {
+			if strings.HasPrefix(strings.ToLower(item), lastWord) {
+				completions = append(completions, item)
+			}
+		}
+
+		if len(completions) == 0 {
+			return
+		}
+
+		head = line[:pos-len(lastWord)]
+		tail = line[pos:]
+		return
+	}
+	line.SetWordCompleter(completer)
 
 	for {
 		var prompt string
 		if isTerminal() {
-			var curDB string
 			db.QueryRow("SELECT DATABASE()").Scan(&curDB)
 			if curDB == "" {
 				curDB = "(none)"
@@ -330,9 +363,7 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 		}
 		cols := output[0].colNames
 		tbl := stable.New().MaxWidth(120)
-		tbl.Writer(os.Stdout, 10)
 		tbl.Header(cols)
-		tbl.Style(stable.StyleLight)
 		for _, row := range output {
 			rowData := make([]interface{}, len(cols))
 			for i := range cols {
@@ -341,7 +372,7 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			}
 			tbl.AddRow(rowData)
 		}
-		tbl.Flush()
+		fmt.Printf("%s", tbl.Render(stable.StyleLight))
 	} else if outputFormat == CSV {
 		if len(output) == 0 {
 			if !isQ {
