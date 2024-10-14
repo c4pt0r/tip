@@ -12,6 +12,15 @@ var (
 	cachedColumnNames = make(map[string][]string)
 )
 
+var KEYWORDS = []string{
+	"USE",
+	"SELECT", "FROM", "WHERE", "JOIN", "ON", "GROUP BY", "ORDER BY",
+	"LIMIT", "OFFSET", "AS", "IS", "NULL", "NOT", "IN", "BETWEEN", "LIKE",
+	"SHOW", "DATABASES", "TABLES", "COLUMNS", "INDEXES", "STATISTICS",
+	"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "GRANT", "REVOKE",
+	"UPDATE", "SET", "WHERE", "ON", "AND", "OR", "XOR", "NOT", "EXISTS",
+}
+
 // Get databases and tables
 func getDatabases(db *sql.DB) ([]string, error) {
 	if len(cachedDBNames) > 0 {

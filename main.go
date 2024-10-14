@@ -11,15 +11,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pelletier/go-toml"
 	"github.com/peterh/liner"
-	"github.com/shenwei356/stable"
 	"golang.org/x/term"
 )
 
@@ -207,14 +208,15 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			log.Println(err)
 			return
 		}
-
 		words := strings.Fields(line[:pos])
 		lastWord := ""
 		if len(words) > 0 {
 			lastWord = strings.ToLower(words[len(words)-1])
 		}
+		keywords := append(KEYWORDS, append(databases, append(tables, cols...)...)...)
+		sort.Strings(keywords)
 
-		for _, item := range append(databases, append(tables, cols...)...) {
+		for _, item := range keywords {
 			if strings.HasPrefix(strings.ToLower(item), lastWord) {
 				completions = append(completions, item)
 			}
@@ -229,6 +231,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		return
 	}
 	line.SetWordCompleter(completer)
+	line.SetTabCompletionStyle(liner.TabPrints)
 
 	for {
 		var prompt string
@@ -368,17 +371,23 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			goto I
 		}
 		cols := output[0].colNames
-		tbl := stable.New().MaxWidth(120)
-		tbl.Header(cols)
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader(cols)
+
 		for _, row := range output {
-			rowData := make([]interface{}, len(cols))
+			rowData := make([]string, len(cols))
 			for i := range cols {
 				val := row.colValues[i]
 				rowData[i] = formatValue(val)
 			}
-			tbl.AddRow(rowData)
+			table.Append(rowData)
 		}
-		fmt.Printf("%s", tbl.Render(stable.StyleLight))
+
+		table.SetAutoWrapText(false)
+		table.SetAutoFormatHeaders(true)
+		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.Render()
 	} else if outputFormat == CSV {
 		if len(output) == 0 {
 			if !isQ {
