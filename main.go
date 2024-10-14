@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"strings"
 	"time"
 
@@ -214,20 +213,23 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			lastWord = strings.ToLower(words[len(words)-1])
 		}
 		keywords := append(KEYWORDS, append(databases, append(tables, cols...)...)...)
-		sort.Strings(keywords)
 
 		for _, item := range keywords {
 			if strings.HasPrefix(strings.ToLower(item), lastWord) {
 				completions = append(completions, item)
 			}
 		}
-
 		if len(completions) == 0 {
 			return
 		}
-
-		head = line[:pos-len(lastWord)]
-		tail = line[pos:]
+		if pos > 0 && line[pos-1] == ' ' {
+			completions = []string{}
+			head = line[:pos]
+			tail = line[pos:]
+		} else {
+			head = line[:pos-len(lastWord)]
+			tail = line[pos:]
+		}
 		return
 	}
 	line.SetWordCompleter(completer)
@@ -382,7 +384,6 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			}
 			table.Append(rowData)
 		}
-
 		table.SetAutoWrapText(false)
 		table.SetAutoFormatHeaders(true)
 		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -443,6 +444,8 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	var db *sql.DB
 	var err error
 
+	fmt.Printf("Connecting to TiDB at: %s...", host)
+
 	if useTLS {
 		mysql.RegisterTLSConfig("tidb", &tls.Config{
 			MinVersion: tls.VersionTLS12,
@@ -453,15 +456,23 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
+		fmt.Printf("Failed!\n")
 		return nil, err
 	}
 
 	err = db.Ping()
 	if err != nil {
 		db.Close()
+		fmt.Printf("Failed!\n")
 		return nil, err
 	}
 
+	fmt.Printf("Connected!\n")
+	var info string
+	db.QueryRow("SELECT tidb_version()").Scan(&info)
+	fmt.Printf("--- server info ---\n")
+	fmt.Printf("%s\n", info)
+	fmt.Printf("-------------------\n")
 	return db, nil
 }
 
@@ -540,9 +551,7 @@ func main() {
 	// Try connecting with TLS
 	db, err := connectWithRetry(dsn, *host, true)
 	if err != nil {
-		log.Printf("Failed to connect to TiDB using TLS: %v", err)
-		log.Println("Attempting connection without TLS...")
-
+		fmt.Println("Attempting connection without TLS...")
 		// Try connecting without TLS
 		db, err = connectWithRetry(dsn, *host, false)
 		if err != nil {
