@@ -329,7 +329,7 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			goto I
 		}
 		cols := output[0].colNames
-		tbl := stable.New().MaxWidth(80)
+		tbl := stable.New().MaxWidth(120)
 		tbl.Writer(os.Stdout, 10)
 		tbl.Header(cols)
 		tbl.Style(stable.StyleLight)
@@ -393,12 +393,37 @@ var (
 	showExecDetails = false
 )
 
+func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
+	var db *sql.DB
+	var err error
+
+	if useTLS {
+		mysql.RegisterTLSConfig("tidb", &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: host,
+		})
+		dsn += "&tls=tidb"
+	}
+
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	err = db.Ping()
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
+}
+
 func main() {
 	// Command-line flags
 	host := flag.String("host", "", "TiDB Serverless hostname")
 	port := flag.String("port", "", "TiDB port")
 	user := flag.String("u", "", "TiDB username")
-	pass := flag.String("p", "", "TiDB password")
 	dbName := flag.String("d", "", "TiDB database")
 	configFile := flag.String("c", getDefaultConfigFilePath(), "Path to configuration file")
 	outputFormat := flag.String("o", "table", "Output format: plain, table(default) or json")
@@ -406,6 +431,16 @@ func main() {
 	version := flag.Bool("version", false, "Display version information")
 	verbose := flag.Bool("v", false, "Display execution details")
 	outputFile := flag.String("O", "", "Output file for results")
+
+	// Add a flag to check if -p was explicitly set
+	var passSet bool
+	var pass string
+	flag.Func("p", "TiDB password", func(s string) error {
+		passSet = true
+		pass = s
+		return nil
+	})
+
 	flag.Parse()
 
 	showExecDetails = *verbose
@@ -428,8 +463,8 @@ func main() {
 		if *user == "" && config["user"] != "" {
 			*user = config["user"]
 		}
-		if *pass == "" && config["password"] != "" {
-			*pass = config["password"]
+		if !passSet && config["password"] != "" {
+			pass = config["password"]
 		}
 		if *dbName == "" && config["database"] != "" {
 			*dbName = config["database"]
@@ -446,25 +481,27 @@ func main() {
 	if *user == "" {
 		*user = envUser
 	}
-	if *pass == "" {
-		*pass = envPass
+	if !passSet && pass == "" {
+		pass = envPass
 	}
 	if *dbName == "" {
 		*dbName = defaultDatabase
 	}
 
-	mysql.RegisterTLSConfig("tidb", &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: *host,
-	})
-
 	// Database connection string
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&tls=tidb", *user, *pass, *host, *port, *dbName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4", *user, pass, *host, *port, *dbName)
 
-	// Connect to TiDB
-	db, err := sql.Open("mysql", dsn)
+	// Try connecting with TLS
+	db, err := connectWithRetry(dsn, *host, true)
 	if err != nil {
-		log.Fatalf("Failed to connect to TiDB: %v", err)
+		log.Printf("Failed to connect to TiDB using TLS: %v", err)
+		log.Println("Attempting connection without TLS...")
+
+		// Try connecting without TLS
+		db, err = connectWithRetry(dsn, *host, false)
+		if err != nil {
+			log.Fatalf("Failed to connect to TiDB: %v", err)
+		}
 	}
 	defer db.Close()
 
