@@ -444,7 +444,7 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	var db *sql.DB
 	var err error
 
-	fmt.Printf("Connecting to TiDB at: %s...", host)
+	log.Printf("Connecting to TiDB at: %s...", host)
 
 	if useTLS {
 		mysql.RegisterTLSConfig("tidb", &tls.Config{
@@ -456,23 +456,25 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
-		fmt.Printf("Failed!\n")
+		log.Println("Failed!")
 		return nil, err
 	}
 
 	err = db.Ping()
 	if err != nil {
 		db.Close()
-		fmt.Printf("Failed!\n")
+		log.Println("Failed!")
 		return nil, err
 	}
 
-	fmt.Printf("Connected!\n")
+	log.Println("Connected!")
 	var info string
 	db.QueryRow("SELECT tidb_version()").Scan(&info)
-	fmt.Printf("--- server info ---\n")
-	fmt.Printf("%s\n", info)
-	fmt.Printf("-------------------\n")
+	log.Println("--- server info ---")
+	for _, line := range strings.Split(info, "\n") {
+		log.Println(line)
+	}
+	log.Println("-------------------")
 	return db, nil
 }
 
