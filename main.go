@@ -213,6 +213,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 			lastWord = strings.ToLower(words[len(words)-1])
 		}
 		keywords := append(KEYWORDS, append(databases, append(tables, cols...)...)...)
+		keywords = append(keywords, SystemCmdNames()...)
 
 		for _, item := range keywords {
 			if strings.HasPrefix(strings.ToLower(item), lastWord) {
@@ -255,6 +256,16 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 		}
 
 		trimmedInput := strings.TrimSpace(input)
+
+		// Check if it's a system command
+		if strings.HasPrefix(trimmedInput, ".") {
+			if err := handleCmd(db, trimmedInput, os.Stdout); err != nil {
+				log.Println(err)
+			}
+			line.AppendHistory(trimmedInput)
+			continue
+		}
+
 		queryBuilder += input + "\n"
 
 		// Check if input is from a pipe and ends with a semicolon
