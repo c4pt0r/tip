@@ -477,6 +477,9 @@ var (
 )
 
 func greeting(db *sql.DB) {
+	if !isTerminal() {
+		return
+	}
 	var clientInfo string
 	if info, ok := debug.ReadBuildInfo(); ok {
 		clientInfo = fmt.Sprintf("tip version: %s", info.Main.Version)
