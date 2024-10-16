@@ -18,6 +18,7 @@ var (
 		VerCmd{},
 		RefreshCmd{},
 		ConnectCmd{},
+		OutputFormatCmd{}, // Add the new command to the list
 	}
 )
 
@@ -100,6 +101,48 @@ func (cmd ConnectCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writ
 
 	*dbPtr = db
 	resultWriter.Write([]byte("Connected successfully.\n"))
+	return nil
+}
+
+type OutputFormatCmd struct{}
+
+func (cmd OutputFormatCmd) Name() string {
+	return ".output_format"
+}
+
+func (cmd OutputFormatCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
+	if len(args) == 0 {
+		// If no arguments, print the current output format and available options
+		current := *globalOutputFormat
+		options := []string{"json", "table", "plain", "csv"}
+		formattedOptions := make([]string, len(options))
+
+		for i, opt := range options {
+			if opt == current.String() {
+				formattedOptions[i] = "[" + opt + "]"
+			} else {
+				formattedOptions[i] = opt
+			}
+		}
+
+		resultWriter.Write([]byte(fmt.Sprintf("Current output format: %s\n", current)))
+		resultWriter.Write([]byte(fmt.Sprintf("Available formats: %s\n", strings.Join(formattedOptions, " "))))
+		return nil
+	}
+
+	if len(args) != 1 {
+		return fmt.Errorf("usage: .output_format <format>")
+	}
+
+	format := parseOutputFormat(args[0])
+	if format == Plain && args[0] != "plain" {
+		return fmt.Errorf("invalid format: %s", args[0])
+	}
+
+	// Update the global outputFormat variable
+	*globalOutputFormat = format
+
+	resultWriter.Write([]byte(fmt.Sprintf("Output format set to: %s\n", format)))
 	return nil
 }
 

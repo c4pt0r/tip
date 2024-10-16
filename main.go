@@ -168,7 +168,9 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 	return isQ, output, hasRows, affectedRows, nil
 }
 
-func repl(db *sql.DB, outputFormat OutputFormat) {
+var globalOutputFormat *OutputFormat
+
+func repl(db *sql.DB, outputFormat *OutputFormat) {
 	if isTerminal() {
 		showExecDetails = true
 	}
@@ -297,7 +299,7 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 				continue
 			}
 			execTime := time.Since(startTime)
-			printResults(isQ, output, outputFormat, hasRows, execTime, affectedRows)
+			printResults(isQ, output, *outputFormat, hasRows, execTime, affectedRows)
 			queryBuilder = "" // Reset the query builder after execution
 		}
 	}
@@ -681,5 +683,11 @@ func main() {
 		fmt.Printf("tip version: %s\n", Version)
 		os.Exit(0)
 	}
-	repl(db, parseOutputFormat(*outputFormat))
+
+	// Initialize the global output format
+	initialOutputFormat := parseOutputFormat(*outputFormat)
+	globalOutputFormat = &initialOutputFormat
+
+	// Modify the repl function call to use the global output format
+	repl(db, globalOutputFormat)
 }
