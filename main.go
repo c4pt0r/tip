@@ -512,6 +512,43 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	return db, nil
 }
 
+// ConnInfo represents the connection information for a database
+type ConnInfo struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Database string
+}
+
+// connectToDatabase attempts to connect to the database using the provided ConnInfo
+func connectToDatabase(info ConnInfo) (*sql.DB, error) {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4",
+		info.User, info.Password, info.Host, info.Port, info.Database)
+
+	// Try connecting with TLS
+	db, err := connectWithRetry(dsn, info.Host, true)
+	if err != nil {
+		fmt.Println("Attempting connection without TLS...")
+		// Try connecting without TLS
+		db, err = connectWithRetry(dsn, info.Host, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to TiDB: %v", err)
+		}
+	}
+
+	if db != nil {
+		db.SetMaxOpenConns(100)
+		db.SetMaxIdleConns(100)
+
+		if err := db.Ping(); err != nil {
+			return nil, fmt.Errorf("failed to ping TiDB: %v", err)
+		}
+	}
+
+	return db, nil
+}
+
 func main() {
 	// Command-line flags
 	host := flag.String("host", "", "TiDB Serverless hostname")
@@ -581,31 +618,24 @@ func main() {
 		*dbName = defaultDatabase
 	}
 
-	// Database connection string
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4", *user, pass, *host, *port, *dbName)
+	// Create ConnInfo struct
+	connInfo := ConnInfo{
+		Host:     *host,
+		Port:     *port,
+		User:     *user,
+		Password: pass,
+		Database: *dbName,
+	}
 
-	// Try connecting with TLS
-	db, err := connectWithRetry(dsn, *host, true)
+	// Connect to the database
+	db, err := connectToDatabase(connInfo)
 	if err != nil {
-		fmt.Println("Attempting connection without TLS...")
-		// Try connecting without TLS
-		db, err = connectWithRetry(dsn, *host, false)
-		if err != nil {
-			log.Println("Failed to connect to TiDB:", err)
-			// Continue with db as nil
-		}
+		log.Println("Failed to connect to TiDB:", err)
+		// Continue with db as nil
 	}
 	if db != nil {
 		defer db.Close()
-		db.SetMaxOpenConns(100)
-		db.SetMaxIdleConns(100)
-
-		if err := db.Ping(); err != nil {
-			log.Println("Failed to ping TiDB:", err)
-			// Continue with db as nil
-		} else {
-			greeting(db)
-		}
+		greeting(db) // Call greeting after successful connection
 	}
 
 	var resultIOWriter ResultIOWriter
@@ -629,9 +659,6 @@ func main() {
 
 	// Check if -e flag is provided
 	if *execSQL != "" {
-		if db == nil {
-			log.Fatal("Error: Not connected to any database. Unable to execute SQL.")
-		}
 		startTime := time.Now() // Start timing the query execution
 		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, resultIOWriter)
 		if err != nil {
