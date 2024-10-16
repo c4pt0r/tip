@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -265,7 +266,7 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 
 		// Check if it's a system command
 		if strings.HasPrefix(trimmedInput, ".") {
-			if err := handleCmd(&db, trimmedInput, os.Stdout); err != nil {
+			if err := handleCmd(trimmedInput, os.Stdout); err != nil {
 				log.Println(err)
 			}
 			line.AppendHistory(trimmedInput)
@@ -523,8 +524,27 @@ type ConnInfo struct {
 	Database string
 }
 
+var (
+	globalDB     *sql.DB
+	globalDBLock sync.RWMutex
+)
+
+// GetDB returns the current global database connection
+func GetDB() *sql.DB {
+	globalDBLock.RLock()
+	defer globalDBLock.RUnlock()
+	return globalDB
+}
+
+// SetDB sets the global database connection
+func SetDB(db *sql.DB) {
+	globalDBLock.Lock()
+	defer globalDBLock.Unlock()
+	globalDB = db
+}
+
 // connectToDatabase attempts to connect to the database using the provided ConnInfo
-func connectToDatabase(info ConnInfo) (*sql.DB, error) {
+func connectToDatabase(info ConnInfo) error {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4",
 		info.User, info.Password, info.Host, info.Port, info.Database)
 
@@ -535,7 +555,7 @@ func connectToDatabase(info ConnInfo) (*sql.DB, error) {
 		// Try connecting without TLS
 		db, err = connectWithRetry(dsn, info.Host, false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to connect to TiDB: %v", err)
+			return fmt.Errorf("failed to connect to TiDB: %v", err)
 		}
 	}
 
@@ -544,11 +564,13 @@ func connectToDatabase(info ConnInfo) (*sql.DB, error) {
 		db.SetMaxIdleConns(100)
 
 		if err := db.Ping(); err != nil {
-			return nil, fmt.Errorf("failed to ping TiDB: %v", err)
+			return fmt.Errorf("failed to ping TiDB: %v", err)
 		}
 	}
 
-	return db, nil
+	// Update global DB variable
+	SetDB(db)
+	return nil
 }
 
 func main() {
@@ -630,14 +652,14 @@ func main() {
 	}
 
 	// Connect to the database
-	db, err := connectToDatabase(connInfo)
+	err := connectToDatabase(connInfo)
 	if err != nil {
 		log.Println("Failed to connect to TiDB:", err)
 		// Continue with db as nil
 	}
-	if db != nil {
-		defer db.Close()
-		greeting(db) // Call greeting after successful connection
+	if GetDB() != nil {
+		defer GetDB().Close()
+		greeting(GetDB()) // Call greeting after successful connection
 	}
 
 	var resultIOWriter ResultIOWriter
@@ -662,7 +684,7 @@ func main() {
 	// Check if -e flag is provided
 	if *execSQL != "" {
 		startTime := time.Now() // Start timing the query execution
-		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, resultIOWriter)
+		isQ, output, hasRows, affectedRows, err := executeSQL(GetDB(), *execSQL, resultIOWriter)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
@@ -689,5 +711,5 @@ func main() {
 	globalOutputFormat = &initialOutputFormat
 
 	// Modify the repl function call to use the global output format
-	repl(db, globalOutputFormat)
+	repl(GetDB(), globalOutputFormat)
 }

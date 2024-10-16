@@ -1,15 +1,16 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"io"
 	"strings"
 )
 
 type SystemCmd interface {
-	Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error
+	Handle(args []string, resultWriter io.Writer) error
 	Name() string
+	Description() string
+	Usage() string
 }
 
 var (
@@ -36,10 +37,17 @@ func (cmd HelpCmd) Name() string {
 	return ".help"
 }
 
-func (cmd HelpCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
-	resultWriter.Write([]byte("Help for tip:\n"))
+func (cmd HelpCmd) Description() string {
+	return "Display help information for all available commands"
+}
+
+func (cmd HelpCmd) Usage() string {
+	return ".help"
+}
+
+func (cmd HelpCmd) Handle(args []string, resultWriter io.Writer) error {
 	for _, cmd := range RegisteredSystemCmds {
-		resultWriter.Write([]byte(cmd.Name() + "\n"))
+		resultWriter.Write([]byte(cmd.Name() + " - " + cmd.Description() + ". Usage: " + cmd.Usage() + "\n"))
 	}
 	return nil
 }
@@ -50,7 +58,15 @@ func (cmd VerCmd) Name() string {
 	return ".ver"
 }
 
-func (cmd VerCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
+func (cmd VerCmd) Description() string {
+	return "Display the current version of tip"
+}
+
+func (cmd VerCmd) Usage() string {
+	return ".ver"
+}
+
+func (cmd VerCmd) Handle(args []string, resultWriter io.Writer) error {
 	resultWriter.Write([]byte("tip version: " + Version + "\n"))
 	return nil
 }
@@ -61,7 +77,15 @@ func (cmd RefreshCmd) Name() string {
 	return ".refresh_completion"
 }
 
-func (cmd RefreshCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
+func (cmd RefreshCmd) Description() string {
+	return "Refresh completion (not implemented yet)"
+}
+
+func (cmd RefreshCmd) Usage() string {
+	return ".refresh_completion"
+}
+
+func (cmd RefreshCmd) Handle(args []string, resultWriter io.Writer) error {
 	resultWriter.Write([]byte("not impl yet\n"))
 	return nil
 }
@@ -72,7 +96,15 @@ func (cmd ConnectCmd) Name() string {
 	return ".connect"
 }
 
-func (cmd ConnectCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
+func (cmd ConnectCmd) Description() string {
+	return "Connect to a TiDB database"
+}
+
+func (cmd ConnectCmd) Usage() string {
+	return ".connect <host> <port> <user> <password> [database]"
+}
+
+func (cmd ConnectCmd) Handle(args []string, resultWriter io.Writer) error {
 	if len(args) < 4 {
 		return fmt.Errorf("usage: .connect <host> <port> <user> <password> [database]")
 	}
@@ -86,20 +118,19 @@ func (cmd ConnectCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writ
 		dbName = args[4]
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4", user, pass, host, port, dbName)
-
-	// Try connecting with TLS
-	db, err := connectWithRetry(dsn, host, true)
-	if err != nil {
-		fmt.Println("Attempting connection without TLS...")
-		// Try connecting without TLS
-		db, err = connectWithRetry(dsn, host, false)
-		if err != nil {
-			return fmt.Errorf("failed to connect to TiDB: %v", err)
-		}
+	connInfo := ConnInfo{
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: pass,
+		Database: dbName,
 	}
 
-	*dbPtr = db
+	err := connectToDatabase(connInfo)
+	if err != nil {
+		return fmt.Errorf("failed to connect to TiDB: %v", err)
+	}
+
 	resultWriter.Write([]byte("Connected successfully.\n"))
 	return nil
 }
@@ -110,7 +141,15 @@ func (cmd OutputFormatCmd) Name() string {
 	return ".output_format"
 }
 
-func (cmd OutputFormatCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io.Writer) error {
+func (cmd OutputFormatCmd) Description() string {
+	return "Set or display the current output format"
+}
+
+func (cmd OutputFormatCmd) Usage() string {
+	return ".output_format [format]"
+}
+
+func (cmd OutputFormatCmd) Handle(args []string, resultWriter io.Writer) error {
 	if len(args) == 0 {
 		// If no arguments, print the current output format and available options
 		current := *globalOutputFormat
@@ -125,8 +164,7 @@ func (cmd OutputFormatCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io
 			}
 		}
 
-		resultWriter.Write([]byte(fmt.Sprintf("Current output format: %s\n", current)))
-		resultWriter.Write([]byte(fmt.Sprintf("Available formats: %s\n", strings.Join(formattedOptions, " "))))
+		resultWriter.Write([]byte(fmt.Sprintf("%s\n", strings.Join(formattedOptions, " "))))
 		return nil
 	}
 
@@ -146,14 +184,15 @@ func (cmd OutputFormatCmd) Handle(dbPtr **sql.DB, args []string, resultWriter io
 	return nil
 }
 
-func handleCmd(dbPtr **sql.DB, line string, resultWriter io.Writer) error {
+func handleCmd(line string, resultWriter io.Writer) error {
 	line = strings.TrimSpace(line)
 	cmdName := strings.Split(line, " ")[0]
 	params := strings.Split(line, " ")[1:]
 	for _, cmd := range RegisteredSystemCmds {
 		if cmd.Name() == cmdName {
-			return cmd.Handle(dbPtr, params, resultWriter)
+			return cmd.Handle(params, resultWriter)
 		}
 	}
+	resultWriter.Write([]byte("Unknown command: " + cmdName + ", use .help for help\n"))
 	return nil
 }
