@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
+	"time"
 )
 
 type SystemCmd interface {
@@ -19,7 +23,8 @@ var (
 		VerCmd{},
 		RefreshCmd{},
 		ConnectCmd{},
-		OutputFormatCmd{}, // Add the new command to the list
+		OutputFormatCmd{},
+		AskCmd{},
 	}
 )
 
@@ -29,6 +34,19 @@ func SystemCmdNames() []string {
 		names[i] = cmd.Name()
 	}
 	return names
+}
+
+func handleCmd(line string, resultWriter io.Writer) error {
+	line = strings.TrimSpace(line)
+	cmdName := strings.Split(line, " ")[0]
+	params := strings.Split(line, " ")[1:]
+	for _, cmd := range RegisteredSystemCmds {
+		if cmd.Name() == cmdName {
+			return cmd.Handle(params, resultWriter)
+		}
+	}
+	resultWriter.Write([]byte("Unknown command: " + cmdName + ", use .help for help\n"))
+	return nil
 }
 
 type HelpCmd struct{}
@@ -47,7 +65,7 @@ func (cmd HelpCmd) Usage() string {
 
 func (cmd HelpCmd) Handle(args []string, resultWriter io.Writer) error {
 	for _, cmd := range RegisteredSystemCmds {
-		resultWriter.Write([]byte(cmd.Name() + " - " + cmd.Description() + ". Usage: " + cmd.Usage() + "\n"))
+		resultWriter.Write([]byte(cmd.Name() + " - " + cmd.Description() + "- Usage: " + cmd.Usage() + "\n"))
 	}
 	return nil
 }
@@ -184,15 +202,114 @@ func (cmd OutputFormatCmd) Handle(args []string, resultWriter io.Writer) error {
 	return nil
 }
 
-func handleCmd(line string, resultWriter io.Writer) error {
-	line = strings.TrimSpace(line)
-	cmdName := strings.Split(line, " ")[0]
-	params := strings.Split(line, " ")[1:]
-	for _, cmd := range RegisteredSystemCmds {
-		if cmd.Name() == cmdName {
-			return cmd.Handle(params, resultWriter)
+type AskCmd struct{}
+
+func (cmd AskCmd) Name() string {
+	return ".ask"
+}
+
+func (cmd AskCmd) Description() string {
+	return "Ask a question to the database"
+}
+
+func (cmd AskCmd) Usage() string {
+	return ".ask <question>"
+}
+
+// AskResponse struct for parsing the API response
+type AskResponse struct {
+	Content string `json:"content"`
+}
+
+// askQuestion sends a question to the TiDB AI API and returns the response
+func askQuestion(question string) (string, error) {
+	url := "https://tidb.ai/api/v1/chats"
+
+	// Construct request body
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"messages": []map[string]interface{}{
+			{
+				"role":    "user",
+				"content": question,
+			},
+		},
+		"chat_engine": "default",
+		"stream":      false,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error marshaling request body: %v", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("error creating request: %v", err)
+	}
+
+	// Set request headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("accept", "application/json")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %v", err)
+	}
+
+	// Parse response
+	var askResp AskResponse
+	err = json.Unmarshal(body, &askResp)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshaling response: %v", err)
+	}
+
+	return askResp.Content, nil
+}
+
+func (cmd AskCmd) Handle(args []string, resultWriter io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: .ask <question>")
+	}
+	question := strings.Join(args, " ")
+
+	// Start the loading animation in a separate goroutine
+	done := make(chan bool)
+	go loadingAnimation(resultWriter, done)
+
+	answer, err := askQuestion(question)
+
+	// Stop the loading animation
+	done <- true
+
+	if err != nil {
+		return fmt.Errorf("error asking question: %v", err)
+	}
+
+	// Clear the loading animation line
+	resultWriter.Write([]byte("\r\033[K"))
+	resultWriter.Write([]byte(answer + "\n"))
+	return nil
+}
+
+func loadingAnimation(w io.Writer, done chan bool) {
+	frames := []string{"-", "\\", "|", "/"}
+	i := 0
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			w.Write([]byte(fmt.Sprintf("\rThinking %s", frames[i])))
+			time.Sleep(100 * time.Millisecond)
+			i = (i + 1) % len(frames)
 		}
 	}
-	resultWriter.Write([]byte("Unknown command: " + cmdName + ", use .help for help\n"))
-	return nil
 }
