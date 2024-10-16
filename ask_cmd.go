@@ -115,13 +115,11 @@ func (cmd AskCmd) Handle(args []string, resultWriter io.Writer) error {
 	// If SQL statements are found, create a selection menu
 	if len(sqlStatements) > 0 {
 		prompt := promptui.Select{
-			Label: "Select SQL statement to execute",
+			Label: "Select SQL statement to execute (Ctrl+C to cancel)",
 			Items: sqlStatements,
 		}
 		_, ret, _ := prompt.Run()
-		if ret != "" {
-			replSuggestion = ret
-		}
+		replSuggestion = ret
 	}
 
 	return nil
@@ -134,7 +132,15 @@ func extractSQLStatements(text string) []string {
 	statements := make([]string, 0, len(matches))
 	for _, match := range matches {
 		if len(match) > 1 {
-			statements = append(statements, strings.TrimSpace(match[1]))
+			// multiple lines into one line
+			stmt := strings.TrimSpace(match[1])
+			// split by \n and trim space for each line, and join them with space
+			lines := strings.Split(stmt, "\n")
+			var trimedStmt string
+			for _, line := range lines {
+				trimedStmt += strings.TrimSpace(line) + " "
+			}
+			statements = append(statements, trimedStmt)
 		}
 	}
 
