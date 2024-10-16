@@ -239,14 +239,18 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 	for {
 		var prompt string
 		if isTerminal() {
-			db.QueryRow("SELECT DATABASE()").Scan(&curDB)
-			if curDB == "" {
-				curDB = "(none)"
-			}
-			if queryBuilder == "" {
-				prompt = fmt.Sprintf("%s> ", curDB)
+			if db == nil {
+				prompt = "tip> "
 			} else {
-				prompt = fmt.Sprintf("%s>>> ", curDB)
+				db.QueryRow("SELECT DATABASE()").Scan(&curDB)
+				if curDB == "" {
+					curDB = "(none)"
+				}
+				if queryBuilder == "" {
+					prompt = fmt.Sprintf("%s> ", curDB)
+				} else {
+					prompt = fmt.Sprintf("%s>>> ", curDB)
+				}
 			}
 		}
 
@@ -259,10 +263,16 @@ func repl(db *sql.DB, outputFormat OutputFormat) {
 
 		// Check if it's a system command
 		if strings.HasPrefix(trimmedInput, ".") {
-			if err := handleCmd(db, trimmedInput, os.Stdout); err != nil {
+			if err := handleCmd(&db, trimmedInput, os.Stdout); err != nil {
 				log.Println(err)
 			}
 			line.AppendHistory(trimmedInput)
+			continue
+		}
+
+		// Check if database connection is established
+		if db == nil {
+			log.Println("Error: Not connected to any database. Use .connect to establish a connection.")
 			continue
 		}
 
@@ -581,18 +591,22 @@ func main() {
 		// Try connecting without TLS
 		db, err = connectWithRetry(dsn, *host, false)
 		if err != nil {
-			log.Fatalf("Failed to connect to TiDB: %v", err)
+			log.Println("Failed to connect to TiDB:", err)
+			// Continue with db as nil
 		}
 	}
-	defer db.Close()
+	if db != nil {
+		defer db.Close()
+		db.SetMaxOpenConns(100)
+		db.SetMaxIdleConns(100)
 
-	db.SetMaxOpenConns(100)
-	db.SetMaxIdleConns(100)
-
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping TiDB: %v", err)
+		if err := db.Ping(); err != nil {
+			log.Println("Failed to ping TiDB:", err)
+			// Continue with db as nil
+		} else {
+			greeting(db)
+		}
 	}
-	greeting(db)
 
 	var resultIOWriter ResultIOWriter
 	if *outputFile != "" {
@@ -615,6 +629,9 @@ func main() {
 
 	// Check if -e flag is provided
 	if *execSQL != "" {
+		if db == nil {
+			log.Fatal("Error: Not connected to any database. Unable to execute SQL.")
+		}
 		startTime := time.Now() // Start timing the query execution
 		isQ, output, hasRows, affectedRows, err := executeSQL(db, *execSQL, resultIOWriter)
 		if err != nil {
