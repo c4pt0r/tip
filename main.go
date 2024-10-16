@@ -170,6 +170,7 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 }
 
 var globalOutputFormat *OutputFormat
+var replSuggestion string // Add global variable for REPL suggestion
 
 func repl(db *sql.DB, outputFormat *OutputFormat) {
 	if isTerminal() {
@@ -256,11 +257,22 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 				}
 			}
 		}
+		var input string
+		var err error
+		if replSuggestion != "" {
+			// Use PromptWithSuggestion when replSuggestion is not empty
+			input, err = line.PromptWithSuggestion(prompt, replSuggestion, len(replSuggestion))
+		} else {
+			// Use regular Prompt when replSuggestion is empty
+			input, err = line.Prompt(prompt)
+		}
 
-		input, err := line.Prompt(prompt)
 		if err != nil {
 			break
 		}
+
+		// Reset replSuggestion after each input
+		replSuggestion = ""
 
 		trimmedInput := strings.TrimSpace(input)
 

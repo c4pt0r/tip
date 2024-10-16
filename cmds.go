@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/manifoldco/promptui"
 )
 
 type SystemCmd interface {
@@ -296,7 +299,41 @@ func (cmd AskCmd) Handle(args []string, resultWriter io.Writer) error {
 	// Clear the loading animation line
 	resultWriter.Write([]byte("\r\033[K"))
 	resultWriter.Write([]byte(answer + "\n"))
+
+	// Extract SQL statements
+	sqlStatements := extractSQLStatements(answer)
+
+	// If SQL statements are found, create a selection menu
+	if len(sqlStatements) > 0 {
+		prompt := promptui.Select{
+			Label: "Select SQL statement to execute",
+			Items: sqlStatements,
+		}
+
+		_, ret, err := prompt.Run()
+
+		if err != nil {
+			return fmt.Errorf("prompt")
+		}
+
+		replSuggestion = ret
+	}
+
 	return nil
+}
+
+func extractSQLStatements(text string) []string {
+	re := regexp.MustCompile("(?s)```sql\\s*(.+?)\\s*```")
+	matches := re.FindAllStringSubmatch(text, -1)
+
+	statements := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			statements = append(statements, strings.TrimSpace(match[1]))
+		}
+	}
+
+	return statements
 }
 
 func loadingAnimation(w io.Writer, done chan bool) {
