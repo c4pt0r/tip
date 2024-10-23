@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
@@ -449,13 +450,7 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 	}
 I:
 	if showExecDetails {
-		fmt.Fprintf(os.Stderr, "Execution time: %s\n", execTime)
-		if hasRows {
-			fmt.Fprintf(os.Stderr, "Rows in result: %d\n", len(output))
-		}
-		if affectedRows > 0 {
-			fmt.Fprintf(os.Stderr, "Affected rows: %d\n", affectedRows)
-		}
+		printExecutionDetails(execTime, hasRows, output, affectedRows)
 	}
 }
 
@@ -586,6 +581,18 @@ func connectToDatabase(info ConnInfo) error {
 	// Update global DB variable
 	SetDB(db)
 	return nil
+}
+
+func printExecutionDetails(execTime time.Duration, hasRows bool, output []RowResult, affectedRows int64) {
+	grey := color.New(color.FgHiBlack).SprintFunc()
+
+	fmt.Fprintf(os.Stderr, "%s\n", grey(fmt.Sprintf("Execution time: %s", execTime)))
+	if hasRows {
+		fmt.Fprintf(os.Stderr, "%s\n", grey(fmt.Sprintf("Rows in result: %d", len(output))))
+	}
+	if affectedRows > 0 {
+		fmt.Fprintf(os.Stderr, "%s\n", grey(fmt.Sprintf("Affected rows: %d", affectedRows)))
+	}
 }
 
 func main() {
