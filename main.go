@@ -422,7 +422,7 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 			table.Append(rowData)
 		}
 		table.SetAutoWrapText(false)
-		table.SetAutoFormatHeaders(true)
+		table.SetAutoFormatHeaders(false)
 		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 		table.SetAlignment(tablewriter.ALIGN_LEFT)
 		table.Render()
