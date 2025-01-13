@@ -411,6 +411,12 @@ func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRo
 		}
 		cols := output[0].colNames
 		table := tablewriter.NewWriter(os.Stdout)
+		// get term width
+		width, _, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil {
+			log.Println(err)
+		}
+		table.SetColWidth(width)
 		table.SetHeader(cols)
 
 		for _, row := range output {
