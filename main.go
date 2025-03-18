@@ -12,100 +12,15 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
 	"github.com/olekukonko/tablewriter"
-	"github.com/pelletier/go-toml"
 	"github.com/peterh/liner"
 	"golang.org/x/term"
 )
-
-type OutputFormat int
-
-const (
-	Plain OutputFormat = iota
-	JSON
-	Table
-	CSV
-)
-
-func (f OutputFormat) String() string {
-	return [...]string{"plain", "json", "table", "csv"}[f]
-}
-
-func parseOutputFormat(format string) OutputFormat {
-	switch format {
-	case "json":
-		return JSON
-	case "table":
-		return Table
-	case "csv":
-		return CSV
-	default:
-		return Plain
-	}
-}
-
-// Load configuration from a file
-func loadConfigFromFile(configPath string) (map[string]string, error) {
-	config := make(map[string]string)
-	file, err := os.ReadFile(configPath)
-	if err != nil {
-		return config, err
-	}
-
-	err = toml.Unmarshal(file, &config)
-	if err != nil {
-		return config, err
-	}
-
-	return config, nil
-}
-
-// Load configuration from environment variables or .env file
-func loadConfigFromEnv() (string, string, string, string, string, error) {
-	godotenv.Load(".env") // Optionally load .env file
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USERNAME")
-	password := os.Getenv("DB_PASSWORD")
-
-	defaultDatabase := os.Getenv("DB_DATABASE")
-	if defaultDatabase == "" {
-		defaultDatabase = "test"
-	}
-	return host, port, user, password, defaultDatabase, nil
-}
-
-// RowResult represents a single row of query results
-type RowResult struct {
-	colNames  []string
-	colValues []interface{}
-}
-
-// MarshalJSON customizes the JSON serialization of RowResult
-func (r RowResult) MarshalJSON() ([]byte, error) {
-	converted := make(map[string]interface{})
-	for i, col := range r.colNames {
-		val := r.colValues[i]
-		if byteVal, ok := val.([]byte); ok {
-			converted[col] = string(byteVal)
-		} else {
-			converted[col] = val
-		}
-	}
-	return json.Marshal(converted)
-}
-
-func isTerminal() bool {
-	fd := int(os.Stdin.Fd())
-	return term.IsTerminal(fd)
-}
 
 func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, []RowResult, bool, int64, error) {
 	var output []RowResult
@@ -171,7 +86,7 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 }
 
 var globalOutputFormat *OutputFormat
-var replSuggestion string // Add global variable for REPL suggestion
+var replSuggestion string // Used by ask_cmd.go for REPL suggestion
 
 func repl(db *sql.DB, outputFormat *OutputFormat) {
 	if isTerminal() {
@@ -326,47 +241,6 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 	}
 }
 
-func formatValue(val interface{}) string {
-	switch v := val.(type) {
-	case nil:
-		return "NULL"
-	case bool:
-		return fmt.Sprintf("%t", v)
-	case int, int64:
-		return fmt.Sprintf("%d", v)
-	case float64:
-		return fmt.Sprintf("%f", v)
-	case string:
-		return v
-	case []byte:
-		return string(v)
-	case time.Time:
-		return v.Format("2006-01-02 15:04:05")
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
-
-func formatCSVValue(val interface{}) string {
-	switch v := val.(type) {
-	case nil:
-		return ""
-	case bool:
-		return fmt.Sprintf("%t", v)
-	case int, int64:
-		return fmt.Sprintf("%d", v)
-	case float64:
-		return fmt.Sprintf("%f", v)
-	case string:
-		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(v, "\"", "\"\""))
-	case []byte:
-		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(string(v), "\"", "\"\""))
-	case time.Time:
-		return fmt.Sprintf("\"%s\"", v.Format("2006-01-02 15:04:05"))
-	default:
-		return fmt.Sprintf("\"%v\"", v)
-	}
-}
 
 func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
 	if outputFormat == JSON {
@@ -460,17 +334,6 @@ I:
 	}
 }
 
-func getDefaultConfigFilePath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("Failed to get user home directory: %v", err)
-	}
-	configFile := filepath.Join(homeDir, ".tip/config.toml")
-	if _, err := os.Stat(configFile); err != nil {
-		return ""
-	}
-	return configFile
-}
 
 var (
 	Version         = "dev"
@@ -531,33 +394,6 @@ func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
 	return db, nil
 }
 
-// ConnInfo represents the connection information for a database
-type ConnInfo struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Database string
-}
-
-var (
-	globalDB     *sql.DB
-	globalDBLock sync.RWMutex
-)
-
-// GetDB returns the current global database connection
-func GetDB() *sql.DB {
-	globalDBLock.RLock()
-	defer globalDBLock.RUnlock()
-	return globalDB
-}
-
-// SetDB sets the global database connection
-func SetDB(db *sql.DB) {
-	globalDBLock.Lock()
-	defer globalDBLock.Unlock()
-	globalDB = db
-}
 
 // connectToDatabase attempts to connect to the database using the provided ConnInfo
 func connectToDatabase(info ConnInfo) error {
