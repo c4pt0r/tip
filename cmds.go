@@ -127,9 +127,14 @@ func (cmd ConnectCmd) Handle(args []string, resultWriter io.Writer) error {
 	port := args[1]
 	user := args[2]
 	pass := args[3]
-	dbName := "test"
+	dbName := ""
 	if len(args) > 4 {
 		dbName = args[4]
+	} else if GetLastUsedDB() != "" {
+		// If no database is specified and we have a last used database, use it
+		dbName = GetLastUsedDB()
+	} else {
+		dbName = "test" // Default database if no last used database
 	}
 
 	connInfo := ConnInfo{

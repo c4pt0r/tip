@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -232,32 +231,4 @@ func getAllColumnNames(db *sql.DB, dbName string) ([]string, error) {
 	}
 	cachedColumnNames[dbName] = columnNames
 	return columnNames, nil
-}
-
-// Connection info and handling
-type ConnInfo struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Database string
-}
-
-var (
-	globalDB     *sql.DB
-	globalDBLock sync.RWMutex
-)
-
-// GetDB returns the current global database connection
-func GetDB() *sql.DB {
-	globalDBLock.RLock()
-	defer globalDBLock.RUnlock()
-	return globalDB
-}
-
-// SetDB sets the global database connection
-func SetDB(db *sql.DB) {
-	globalDBLock.Lock()
-	defer globalDBLock.Unlock()
-	globalDB = db
 }
