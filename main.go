@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -87,6 +88,40 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 
 var globalOutputFormat *OutputFormat
 var replSuggestion string // Used by ask_cmd.go for REPL suggestion
+
+var (
+	globalDB     *sql.DB
+	globalDBLock sync.RWMutex
+	lastUsedDB   string // Store the last used database
+)
+
+// GetDB returns the current global database connection
+func GetDB() *sql.DB {
+	globalDBLock.RLock()
+	defer globalDBLock.RUnlock()
+	return globalDB
+}
+
+// SetDB sets the global database connection
+func SetDB(db *sql.DB) {
+	globalDBLock.Lock()
+	defer globalDBLock.Unlock()
+	globalDB = db
+}
+
+// GetLastUsedDB returns the last used database
+func GetLastUsedDB() string {
+	globalDBLock.RLock()
+	defer globalDBLock.RUnlock()
+	return lastUsedDB
+}
+
+// SetLastUsedDB sets the last used database
+func SetLastUsedDB(db string) {
+	globalDBLock.Lock()
+	defer globalDBLock.Unlock()
+	lastUsedDB = db
+}
 
 func repl(db *sql.DB, outputFormat *OutputFormat) {
 	if isTerminal() {
@@ -166,6 +201,10 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 				if curDB == "" {
 					curDB = "(none)"
 				}
+				// Store the current database as the last used database
+				if curDB != "(none)" {
+					SetLastUsedDB(curDB)
+				}
 				if queryBuilder == "" {
 					prompt = fmt.Sprintf("%s> ", curDB)
 				} else {
@@ -241,6 +280,108 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 	}
 }
 
+var (
+	Version         = "dev"
+	showExecDetails = false
+)
+
+// ConnInfo represents the connection information for a database
+type ConnInfo struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Database string
+}
+
+func greeting(db *sql.DB) {
+	if !isTerminal() {
+		return
+	}
+	var clientInfo string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		clientInfo = fmt.Sprintf("tip version: %s", info.Main.Version)
+	}
+	log.Println(clientInfo)
+
+	var info string
+	err := db.QueryRow("SELECT tidb_version()").Scan(&info)
+	if err != nil {
+		log.Printf("Failed to get server info: %v", err)
+		return
+	}
+	log.Println("------ server info ------")
+	for _, line := range strings.Split(info, "\n") {
+		log.Println(line)
+	}
+	log.Println("-------------------------")
+}
+
+func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
+	var db *sql.DB
+	var err error
+
+	log.Printf("Connecting to TiDB at: %s...", host)
+
+	if useTLS {
+		mysql.RegisterTLSConfig("tidb", &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: host,
+		})
+		dsn += "&tls=tidb"
+	}
+
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		log.Println("Failed!")
+		return nil, err
+	}
+
+	err = db.Ping()
+	if err != nil {
+		db.Close()
+		log.Println("Failed!")
+		return nil, err
+	}
+
+	log.Println("Connected!")
+	return db, nil
+}
+
+// connectToDatabase attempts to connect to the database using the provided ConnInfo
+func connectToDatabase(info ConnInfo) error {
+	// If no database is specified and we have a last used database, use it
+	if info.Database == "" && GetLastUsedDB() != "" {
+		info.Database = GetLastUsedDB()
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4",
+		info.User, info.Password, info.Host, info.Port, info.Database)
+
+	// Try connecting with TLS
+	db, err := connectWithRetry(dsn, info.Host, true)
+	if err != nil {
+		fmt.Println("Attempting connection without TLS...")
+		// Try connecting without TLS
+		db, err = connectWithRetry(dsn, info.Host, false)
+		if err != nil {
+			return fmt.Errorf("failed to connect to TiDB: %v", err)
+		}
+	}
+
+	if db != nil {
+		db.SetMaxOpenConns(100)
+		db.SetMaxIdleConns(100)
+
+		if err := db.Ping(); err != nil {
+			return fmt.Errorf("failed to ping TiDB: %v", err)
+		}
+	}
+
+	// Update global DB variable
+	SetDB(db)
+	return nil
+}
 
 func printResults(isQ bool, output []RowResult, outputFormat OutputFormat, hasRows bool, execTime time.Duration, affectedRows int64) {
 	if outputFormat == JSON {
@@ -332,97 +473,6 @@ I:
 	if showExecDetails {
 		printExecutionDetails(execTime, hasRows, output, affectedRows)
 	}
-}
-
-
-var (
-	Version         = "dev"
-	showExecDetails = false
-)
-
-func greeting(db *sql.DB) {
-	if !isTerminal() {
-		return
-	}
-	var clientInfo string
-	if info, ok := debug.ReadBuildInfo(); ok {
-		clientInfo = fmt.Sprintf("tip version: %s", info.Main.Version)
-	}
-	log.Println(clientInfo)
-
-	var info string
-	err := db.QueryRow("SELECT tidb_version()").Scan(&info)
-	if err != nil {
-		log.Printf("Failed to get server info: %v", err)
-		return
-	}
-	log.Println("------ server info ------")
-	for _, line := range strings.Split(info, "\n") {
-		log.Println(line)
-	}
-	log.Println("-------------------------")
-}
-
-func connectWithRetry(dsn string, host string, useTLS bool) (*sql.DB, error) {
-	var db *sql.DB
-	var err error
-
-	log.Printf("Connecting to TiDB at: %s...", host)
-
-	if useTLS {
-		mysql.RegisterTLSConfig("tidb", &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ServerName: host,
-		})
-		dsn += "&tls=tidb"
-	}
-
-	db, err = sql.Open("mysql", dsn)
-	if err != nil {
-		log.Println("Failed!")
-		return nil, err
-	}
-
-	err = db.Ping()
-	if err != nil {
-		db.Close()
-		log.Println("Failed!")
-		return nil, err
-	}
-
-	log.Println("Connected!")
-	return db, nil
-}
-
-
-// connectToDatabase attempts to connect to the database using the provided ConnInfo
-func connectToDatabase(info ConnInfo) error {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4",
-		info.User, info.Password, info.Host, info.Port, info.Database)
-
-	// Try connecting with TLS
-	db, err := connectWithRetry(dsn, info.Host, true)
-	if err != nil {
-		fmt.Println("Attempting connection without TLS...")
-		// Try connecting without TLS
-		db, err = connectWithRetry(dsn, info.Host, false)
-		if err != nil {
-			return fmt.Errorf("failed to connect to TiDB: %v", err)
-		}
-	}
-
-	if db != nil {
-		db.SetMaxOpenConns(100)
-		db.SetMaxIdleConns(100)
-
-		if err := db.Ping(); err != nil {
-			return fmt.Errorf("failed to ping TiDB: %v", err)
-		}
-	}
-
-	// Update global DB variable
-	SetDB(db)
-	return nil
 }
 
 func printExecutionDetails(execTime time.Duration, hasRows bool, output []RowResult, affectedRows int64) {
