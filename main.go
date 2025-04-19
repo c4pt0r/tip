@@ -361,7 +361,7 @@ func connectToDatabase(info ConnInfo) error {
 	// Try connecting with TLS
 	db, err := connectWithRetry(dsn, info.Host, true)
 	if err != nil {
-		fmt.Println("Attempting connection without TLS...")
+		log.Println("Attempting connection without TLS...")
 		// Try connecting without TLS
 		db, err = connectWithRetry(dsn, info.Host, false)
 		if err != nil {
@@ -499,6 +499,7 @@ func main() {
 	version := flag.Bool("version", false, "Display version information")
 	verbose := flag.Bool("v", false, "Display execution details")
 	outputFile := flag.String("O", "", "Output file for results")
+	evalLuaScript := flag.String("eval-lua-script", "", "Evaluate a Lua script and exit")
 
 	// Add a flag to check if -p was explicitly set
 	var passSet bool
@@ -627,6 +628,23 @@ func main() {
 	// Initialize Lua state
 	InitializeLuaState()
 	defer CloseLuaState()
+
+	// Check if -eval-lua-script flag is provided
+	if *evalLuaScript != "" {
+		if GetDB() == nil {
+			log.Fatal("Error: Not connected to any database. Use .connect to establish a connection first.")
+		}
+		scriptContent, err := os.ReadFile(*evalLuaScript)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read Lua script file: %v\n", err)
+			os.Exit(1)
+		}
+		if err := ExecuteLuaScript(string(scriptContent), flag.Args(), os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to execute Lua script: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Modify the repl function call to use the global output format
 	repl(GetDB(), globalOutputFormat)

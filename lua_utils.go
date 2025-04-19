@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -65,7 +66,11 @@ func ExecuteLuaScript(script string, args []string, resultWriter io.Writer) erro
 		return fmt.Errorf("lua execution error: %v", err)
 	}
 
-	resultWriter.Write([]byte("Lua script executed successfully\n"))
+	// Get the return value from the Lua script
+	returnValue := L.Get(-1)
+
+	// Print the return value
+	log.Println("Lua script executed successfully, return value:", returnValue)
 	return nil
 }
 
