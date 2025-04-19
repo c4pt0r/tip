@@ -85,7 +85,7 @@ func askQuestion(question string) (string, error) {
 	return askResp.Content, nil
 }
 
-func (cmd AskCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd AskCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: .ask <question>")
 	}

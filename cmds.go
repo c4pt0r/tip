@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 type SystemCmd interface {
-	Handle(args []string, resultWriter io.Writer) error
+	Handle(args []string, rawInput string, resultWriter io.Writer) error
 	Name() string
 	Description() string
 	Usage() string
@@ -21,6 +23,7 @@ var (
 		ConnectCmd{},
 		OutputFormatCmd{},
 		AskCmd{},
+		LuaCmd{},
 	}
 )
 
@@ -38,7 +41,7 @@ func handleCmd(line string, resultWriter io.Writer) error {
 	params := strings.Split(line, " ")[1:]
 	for _, cmd := range RegisteredSystemCmds {
 		if cmd.Name() == cmdName {
-			return cmd.Handle(params, resultWriter)
+			return cmd.Handle(params, line, resultWriter)
 		}
 	}
 	resultWriter.Write([]byte("Unknown command: " + cmdName + ", use .help for help\n"))
@@ -59,7 +62,7 @@ func (cmd HelpCmd) Usage() string {
 	return ".help"
 }
 
-func (cmd HelpCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd HelpCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	for _, cmd := range RegisteredSystemCmds {
 		resultWriter.Write([]byte(cmd.Name() + " - " + cmd.Description() + "- Usage: " + cmd.Usage() + "\n"))
 	}
@@ -80,7 +83,7 @@ func (cmd VerCmd) Usage() string {
 	return ".ver"
 }
 
-func (cmd VerCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd VerCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	resultWriter.Write([]byte("tip version: " + Version + "\n"))
 	return nil
 }
@@ -99,7 +102,7 @@ func (cmd RefreshCmd) Usage() string {
 	return ".refresh_completion"
 }
 
-func (cmd RefreshCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd RefreshCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	resultWriter.Write([]byte("not impl yet\n"))
 	return nil
 }
@@ -118,7 +121,7 @@ func (cmd ConnectCmd) Usage() string {
 	return ".connect <host> <port> <user> <password> [database]"
 }
 
-func (cmd ConnectCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd ConnectCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	if len(args) < 4 {
 		return fmt.Errorf("usage: .connect <host> <port> <user> <password> [database]")
 	}
@@ -168,7 +171,7 @@ func (cmd OutputFormatCmd) Usage() string {
 	return ".output_format [format]"
 }
 
-func (cmd OutputFormatCmd) Handle(args []string, resultWriter io.Writer) error {
+func (cmd OutputFormatCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	if len(args) == 0 {
 		// If no arguments, print the current output format and available options
 		current := *globalOutputFormat
@@ -200,5 +203,32 @@ func (cmd OutputFormatCmd) Handle(args []string, resultWriter io.Writer) error {
 	*globalOutputFormat = format
 
 	resultWriter.Write([]byte(fmt.Sprintf("Output format set to: %s\n", format)))
+	return nil
+}
+
+type LuaCmd struct {
+	state *lua.LState
+}
+
+func (cmd LuaCmd) Name() string {
+	return ".lua-eval"
+}
+
+func (cmd LuaCmd) Description() string {
+	return "Execute a Lua script"
+}
+
+func (cmd LuaCmd) Usage() string {
+	return ".lua-eval <script>"
+}
+
+func (cmd LuaCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: .lua-eval \"<script>\" <args>")
+	}
+
+	script := args[0]
+	fmt.Println(script)
+
 	return nil
 }
