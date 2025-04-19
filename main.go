@@ -624,6 +624,10 @@ func main() {
 	initialOutputFormat := parseOutputFormat(*outputFormat)
 	globalOutputFormat = &initialOutputFormat
 
+	// Initialize Lua state
+	InitializeLuaState()
+	defer CloseLuaState()
+
 	// Modify the repl function call to use the global output format
 	repl(GetDB(), globalOutputFormat)
 }
