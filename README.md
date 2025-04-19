@@ -74,8 +74,19 @@ Once connected, you can use the following commands in the interactive shell:
 
 The `.lua-eval` command allows you to execute Lua scripts with direct SQL integration. It provides two main functions:
 
-- `sql.query(query)` - Execute a SELECT query and return results as a table
-- `sql.execute(query)` - Execute an INSERT/UPDATE/DELETE query and return affected rows
+- `sql.query(query)` - Execute a SELECT query and return a Result object
+- `sql.execute(query)` - Execute an INSERT/UPDATE/DELETE query and return a Result object
+
+Both functions return a Result object with the following structure:
+- `ok`: boolean indicating success (true) or failure (false)
+- `error`: error message if any (empty string if successful)
+- For query results:
+  - `data`: table containing the query results (rows)
+  - `columns`: table containing column names
+  - `row_count`: number of rows returned
+- For execute results:
+  - `rows_affected`: number of rows affected
+  - `last_insert_id`: ID of the last inserted row
 
 You can pass arguments to your Lua script after the script string. These arguments are available in the Lua script through the global `args` table:
 
@@ -85,32 +96,47 @@ local minAge = tonumber(args[1]) or 18
 local status = args[2] or 'active'
 
 -- Use arguments in your script
-local results = sql.query(string.format("SELECT * FROM users WHERE age > %d AND status = '%s'", minAge, status))
-for i = 2, #results do
-    local row = results[i]
-    print(string.format("User %s is %d years old", row[1], row[2]))
+local result = sql.query(string.format("SELECT * FROM users WHERE age > %d AND status = '%s'", minAge, status))
+if result.ok then
+    -- Process the data
+    for i, row in ipairs(result.data) do
+        print(string.format("User %s is %d years old", row[1], row[2]))
+    end
+else
+    -- Handle error
+    print("Error: " .. result.error)
 end
 ```
 
 Example usage:
 ```
 .lua-eval "print(args[1])" "hello world"
-.lua-eval "local age = tonumber(args[1]); local results = sql.query('SELECT * FROM users WHERE age > ' .. age)" "25"
+.lua-eval "local age = tonumber(args[1]); local result = sql.query('SELECT * FROM users WHERE age > ' .. age); if result.ok then for i, row in ipairs(result.data) do print(row[1]) end end" "25"
 ```
 
 Example with Lua evaluation:
 
 ```lua
 -- Query and process results
-local results = sql.query("SELECT * FROM users WHERE age > 18")
-for i = 2, #results do  -- Start from 2 to skip header row
-    local row = results[i]
-    print(string.format("User %s is %d years old", row[1], row[2]))
+local result = sql.query("SELECT * FROM users WHERE age > 18")
+if result.ok then
+    -- Process the data
+    for i, row in ipairs(result.data) do
+        print(string.format("User %s is %d years old", row[1], row[2]))
+    end
+    print(string.format("Total rows: %d", result.row_count))
+else
+    -- Handle error
+    print("Error: " .. result.error)
 end
 
 -- Execute an update
-local update = sql.execute("UPDATE users SET status = 'active' WHERE id = 1")
-print(string.format("Updated %d rows", update.rows_affected))
+local result = sql.execute("UPDATE users SET status = 'active' WHERE id = 1")
+if result.ok then
+    print(string.format("Updated %d rows", result.rows_affected))
+else
+    print("Error: " .. result.error)
+end
 ```
 
 or use configuration file / environment variables:

@@ -346,10 +346,8 @@ func (cmd LuaCmd) Handle(args []string, rawInput string, resultWriter io.Writer)
 			for i, col := range columns {
 				headerRow.RawSetInt(i+1, lua.LString(col))
 			}
-			resultTable.RawSetInt(1, headerRow)
-
 			// Add data rows
-			rowIndex := 2
+			rowIndex := 1
 			for rows.Next() {
 				err := rows.Scan(valuePtrs...)
 				if err != nil {
@@ -387,7 +385,7 @@ func (cmd LuaCmd) Handle(args []string, rawInput string, resultWriter io.Writer)
 			// Set the data in the result object
 			result.RawSetString("data", resultTable)
 			result.RawSetString("columns", headerRow)
-			result.RawSetString("row_count", lua.LNumber(rowIndex-2)) // Subtract 1 for header row
+			result.RawSetString("row_count", lua.LNumber(rowIndex-1))
 
 			return result, nil
 		},
