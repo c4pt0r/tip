@@ -60,6 +60,59 @@ Example:
 tip -host mytidbserver.com -port 4000 -u myuser -p mypassword -d mydatabase
 ```
 
+### Interactive Commands
+
+Once connected, you can use the following commands in the interactive shell:
+
+- `.help` - Display help information
+- `.ver` - Display version information
+- `.connect <host> <port> <user> <password> [database]` - Connect to a database
+- `.output_format [format]` - Set or display output format (json/table/plain/csv)
+- `.lua-eval "<script>" [args...]` - Execute Lua script with SQL integration
+
+### Lua Integration
+
+The `.lua-eval` command allows you to execute Lua scripts with direct SQL integration. It provides two main functions:
+
+- `sql.query(query)` - Execute a SELECT query and return results as a table
+- `sql.execute(query)` - Execute an INSERT/UPDATE/DELETE query and return affected rows
+
+You can pass arguments to your Lua script after the script string. These arguments are available in the Lua script through the global `args` table:
+
+```lua
+-- Access command line arguments
+local minAge = tonumber(args[1]) or 18
+local status = args[2] or 'active'
+
+-- Use arguments in your script
+local results = sql.query(string.format("SELECT * FROM users WHERE age > %d AND status = '%s'", minAge, status))
+for i = 2, #results do
+    local row = results[i]
+    print(string.format("User %s is %d years old", row[1], row[2]))
+end
+```
+
+Example usage:
+```
+.lua-eval "print(args[1])" "hello world"
+.lua-eval "local age = tonumber(args[1]); local results = sql.query('SELECT * FROM users WHERE age > ' .. age)" "25"
+```
+
+Example with Lua evaluation:
+
+```lua
+-- Query and process results
+local results = sql.query("SELECT * FROM users WHERE age > 18")
+for i = 2, #results do  -- Start from 2 to skip header row
+    local row = results[i]
+    print(string.format("User %s is %d years old", row[1], row[2]))
+end
+
+-- Execute an update
+local update = sql.execute("UPDATE users SET status = 'active' WHERE id = 1")
+print(string.format("Updated %d rows", update.rows_affected))
+```
+
 or use configuration file / environment variables:
 
 ## Configuration

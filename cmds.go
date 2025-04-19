@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -298,7 +299,183 @@ func (cmd LuaCmd) Handle(args []string, rawInput string, resultWriter io.Writer)
 	for i, arg := range parsedArgs {
 		argTable.RawSetInt(i+1, lua.LString(arg))
 	}
-	cmd.state.SetGlobal("arg", argTable)
+	cmd.state.SetGlobal("args", argTable)
+
+	funcMap := map[string]interface{}{
+		"query": func(query string) (*lua.LTable, error) {
+			// Create a Result object
+			result := cmd.state.NewTable()
+			result.RawSetString("ok", lua.LBool(true))
+			result.RawSetString("error", lua.LString(""))
+
+			conn := GetDB()
+			if conn == nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString("database connection is not available, please connect first using .connect command"))
+				return result, nil
+			}
+
+			rows, err := conn.Query(query)
+			if err != nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString(err.Error()))
+				return result, nil
+			}
+			defer rows.Close()
+
+			// Get column types
+			columns, err := rows.Columns()
+			if err != nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString(err.Error()))
+				return result, nil
+			}
+
+			// Create a slice of interface{} to hold the values
+			values := make([]interface{}, len(columns))
+			valuePtrs := make([]interface{}, len(columns))
+			for i := range columns {
+				valuePtrs[i] = &values[i]
+			}
+
+			// Create result table
+			resultTable := cmd.state.NewTable()
+
+			// Add header row
+			headerRow := cmd.state.NewTable()
+			for i, col := range columns {
+				headerRow.RawSetInt(i+1, lua.LString(col))
+			}
+			resultTable.RawSetInt(1, headerRow)
+
+			// Add data rows
+			rowIndex := 2
+			for rows.Next() {
+				err := rows.Scan(valuePtrs...)
+				if err != nil {
+					result.RawSetString("ok", lua.LBool(false))
+					result.RawSetString("error", lua.LString(err.Error()))
+					return result, nil
+				}
+
+				// Create row table
+				rowTable := cmd.state.NewTable()
+				for i, v := range values {
+					var luaValue lua.LValue
+					switch val := v.(type) {
+					case []byte:
+						luaValue = lua.LString(string(val))
+					case nil:
+						luaValue = lua.LString("NULL")
+					case int64:
+						luaValue = lua.LNumber(val)
+					case float64:
+						luaValue = lua.LNumber(val)
+					case bool:
+						luaValue = lua.LBool(val)
+					case time.Time:
+						luaValue = lua.LString(val.Format("2006-01-02 15:04:05"))
+					default:
+						luaValue = lua.LString(fmt.Sprintf("%v", val))
+					}
+					rowTable.RawSetInt(i+1, luaValue)
+				}
+				resultTable.RawSetInt(rowIndex, rowTable)
+				rowIndex++
+			}
+
+			// Set the data in the result object
+			result.RawSetString("data", resultTable)
+			result.RawSetString("columns", headerRow)
+			result.RawSetString("row_count", lua.LNumber(rowIndex-2)) // Subtract 1 for header row
+
+			return result, nil
+		},
+		"execute": func(query string) (*lua.LTable, error) {
+			// Create a Result object
+			result := cmd.state.NewTable()
+			result.RawSetString("ok", lua.LBool(true))
+			result.RawSetString("error", lua.LString(""))
+
+			conn := GetDB()
+			if conn == nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString("database connection is not available, please connect first using .connect command"))
+				return result, nil
+			}
+
+			res, err := conn.Exec(query)
+			if err != nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString(err.Error()))
+				return result, nil
+			}
+
+			rowsAffected, err := res.RowsAffected()
+			if err != nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString(err.Error()))
+				return result, nil
+			}
+
+			lastInsertId, err := res.LastInsertId()
+			if err != nil {
+				result.RawSetString("ok", lua.LBool(false))
+				result.RawSetString("error", lua.LString(err.Error()))
+				return result, nil
+			}
+
+			// Set the data in the result object
+			result.RawSetString("rows_affected", lua.LNumber(rowsAffected))
+			result.RawSetString("last_insert_id", lua.LNumber(lastInsertId))
+
+			return result, nil
+		},
+	}
+
+	sqlTable := cmd.state.NewTable()
+	for name, fn := range funcMap {
+		fnCopy := fn
+		sqlTable.RawSetString(name, cmd.state.NewFunction(func(L *lua.LState) int {
+			query := L.ToString(1)
+			switch f := fnCopy.(type) {
+			case func(string) (*lua.LTable, error):
+				result, err := f(query)
+				if err != nil {
+					// Create a Result object with error
+					errorResult := L.NewTable()
+					errorResult.RawSetString("ok", lua.LBool(false))
+					errorResult.RawSetString("error", lua.LString(err.Error()))
+					L.Push(errorResult)
+					return 1
+				}
+				L.Push(result)
+			case func(string) (string, error):
+				result, err := f(query)
+				if err != nil {
+					// Create a Result object with error
+					errorResult := L.NewTable()
+					errorResult.RawSetString("ok", lua.LBool(false))
+					errorResult.RawSetString("error", lua.LString(err.Error()))
+					L.Push(errorResult)
+					return 1
+				}
+				// Create a Result object with success
+				successResult := L.NewTable()
+				successResult.RawSetString("ok", lua.LBool(true))
+				successResult.RawSetString("data", lua.LString(result))
+				L.Push(successResult)
+			default:
+				// Create a Result object with error
+				errorResult := L.NewTable()
+				errorResult.RawSetString("ok", lua.LBool(false))
+				errorResult.RawSetString("error", lua.LString("internal error: unsupported function type"))
+				L.Push(errorResult)
+			}
+			return 1
+		}))
+	}
+	cmd.state.SetGlobal("sql", sqlTable)
 
 	// Execute the Lua script
 	if err := cmd.state.DoString(script); err != nil {
