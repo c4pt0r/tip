@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	lua "github.com/yuin/gopher-lua"
@@ -219,16 +220,91 @@ func (cmd LuaCmd) Description() string {
 }
 
 func (cmd LuaCmd) Usage() string {
-	return ".lua-eval <script>"
+	return ".lua-eval \"<script>\""
 }
 
 func (cmd LuaCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: .lua-eval \"<script>\" <args>")
+		return fmt.Errorf("usage: .lua-eval \"<script>\" <args> <args> <args> ...")
 	}
 
-	script := args[0]
-	fmt.Println(script)
+	// Find the script part (everything between the first pair of quotes)
+	re := regexp.MustCompile(`\.lua-eval\s+"((?:[^"\\]|\\.)*)"`)
+	matches := re.FindStringSubmatch(rawInput)
+	if len(matches) < 2 {
+		return fmt.Errorf("invalid script format: script must be enclosed in quotes")
+	}
 
+	// Get the script content
+	script := matches[1]
+	script = strings.Replace(script, `\"`, `"`, -1)
+
+	// Get the position after the script
+	scriptEndPos := strings.Index(rawInput, matches[0]) + len(matches[0])
+	argsPart := strings.TrimSpace(rawInput[scriptEndPos:])
+
+	// Parse arguments properly handling quotes
+	var parsedArgs []string
+	var currentArg strings.Builder
+	var inQuotes bool
+	var escapeNext bool
+
+	for i := 0; i < len(argsPart); i++ {
+		char := argsPart[i]
+
+		if escapeNext {
+			currentArg.WriteByte(char)
+			escapeNext = false
+			continue
+		}
+
+		if char == '\\' {
+			escapeNext = true
+			continue
+		}
+
+		if char == '"' {
+			if inQuotes {
+				inQuotes = false
+			} else {
+				inQuotes = true
+			}
+			continue
+		}
+
+		if char == ' ' && !inQuotes {
+			if currentArg.Len() > 0 {
+				parsedArgs = append(parsedArgs, currentArg.String())
+				currentArg.Reset()
+			}
+			continue
+		}
+
+		currentArg.WriteByte(char)
+	}
+
+	if currentArg.Len() > 0 {
+		parsedArgs = append(parsedArgs, currentArg.String())
+	}
+
+	// Initialize Lua state if not already done
+	if cmd.state == nil {
+		cmd.state = lua.NewState()
+		defer cmd.state.Close()
+	}
+
+	// Create arg table for Lua script
+	argTable := cmd.state.NewTable()
+	for i, arg := range parsedArgs {
+		argTable.RawSetInt(i+1, lua.LString(arg))
+	}
+	cmd.state.SetGlobal("arg", argTable)
+
+	// Execute the Lua script
+	if err := cmd.state.DoString(script); err != nil {
+		return fmt.Errorf("lua execution error: %v", err)
+	}
+
+	resultWriter.Write([]byte("Lua script executed successfully\n"))
 	return nil
 }
