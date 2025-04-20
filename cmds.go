@@ -22,6 +22,7 @@ var (
 		OutputFormatCmd{},
 		AskCmd{},
 		LuaCmd{},
+		LuaRunFileCmd{},
 	}
 )
 

@@ -3,9 +3,34 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 )
+
+type LuaRunFileCmd struct{}
+
+func (cmd LuaRunFileCmd) Name() string {
+	return ".lua-eval-file"
+}
+
+func (cmd LuaRunFileCmd) Description() string {
+	return "Execute a Lua file"
+}
+
+func (cmd LuaRunFileCmd) Usage() string {
+	return ".lua-eval-file <filename> <arg> <arg> <arg>..."
+}
+
+func (cmd LuaRunFileCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
+	filename := args[0]
+	scriptContent, err := os.ReadFile(filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read Lua script file: %v\n", err)
+		os.Exit(1)
+	}
+	return ExecuteLuaScript(string(scriptContent), args[1:], os.Stdout)
+}
 
 type LuaCmd struct{}
 
