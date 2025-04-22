@@ -11,6 +11,7 @@ import (
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+	luajson "layeh.com/gopher-json"
 )
 
 // Global Lua state
@@ -26,6 +27,7 @@ func InitializeLuaState() {
 
 	if globalLuaState == nil {
 		globalLuaState = lua.NewState()
+		luajson.Preload(globalLuaState)
 		registerSQLFunctions(globalLuaState)
 		registerHTTPFunctions(globalLuaState)
 	}
