@@ -500,6 +500,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Display execution details")
 	outputFile := flag.String("O", "", "Output file for results")
 	evalLuaScript := flag.String("eval-lua-script", "", "Evaluate a Lua script and exit")
+	evalLuaFile := flag.String("eval-lua-file", "", "Evaluate a Lua script from a file or URL and exit")
 
 	// Add a flag to check if -p was explicitly set
 	var passSet bool
@@ -637,6 +638,23 @@ func main() {
 		scriptContent, err := os.ReadFile(*evalLuaScript)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to read Lua script file: %v\n", err)
+			os.Exit(1)
+		}
+		if err := ExecuteLuaScript(string(scriptContent), flag.Args(), os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to execute Lua script: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Check if -eval-lua-file flag is provided
+	if *evalLuaFile != "" {
+		if GetDB() == nil {
+			log.Fatal("Error: Not connected to any database. Use .connect to establish a connection first.")
+		}
+		scriptContent, err := FetchLuaScriptContent(*evalLuaFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read Lua script: %v\n", err)
 			os.Exit(1)
 		}
 		if err := ExecuteLuaScript(string(scriptContent), flag.Args(), os.Stdout); err != nil {

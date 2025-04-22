@@ -24,9 +24,9 @@ func (cmd LuaRunFileCmd) Usage() string {
 
 func (cmd LuaRunFileCmd) Handle(args []string, rawInput string, resultWriter io.Writer) error {
 	filename := args[0]
-	scriptContent, err := os.ReadFile(filename)
+	scriptContent, err := FetchLuaScriptContent(filename)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read Lua script file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to read Lua script: %v\n", err)
 		os.Exit(1)
 	}
 	return ExecuteLuaScript(string(scriptContent), args[1:], os.Stdout)

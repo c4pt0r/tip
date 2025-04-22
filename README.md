@@ -69,6 +69,7 @@ Once connected, you can use the following commands in the interactive shell:
 - `.connect <host> <port> <user> <password> [database]` - Connect to a database
 - `.output_format [format]` - Set or display output format (json/table/plain/csv)
 - `.lua-eval "<script>" [args...]` - Execute Lua script with SQL integration
+- `.lua-eval-file <filename|url> [args...]` - Execute a Lua script from a file or URL with SQL integration
 
 ### Lua Integration
 
@@ -138,6 +139,64 @@ else
     print("Error: " .. result.error)
 end
 ```
+
+### HTTP Integration
+
+The Lua integration also provides HTTP functionality through the `http.fetch` function, which allows you to make HTTP requests from your Lua scripts:
+
+```lua
+-- Basic GET request
+local success, response = http.fetch("GET", "https://api.example.com/data", nil, "", nil)
+if success then
+    print("Status code:", response.status_code)
+    print("Response body:", response.body)
+    -- Access headers
+    for k, v in pairs(response.headers) do
+        print(k .. ": " .. v)
+    end
+else
+    print("Error:", response)
+end
+
+-- POST request with headers and body
+local headers = {
+    ["Content-Type"] = "application/json",
+    ["Authorization"] = "Bearer token123"
+}
+local body = '{"name": "John", "age": 30}'
+local success, response = http.fetch("POST", "https://api.example.com/users", headers, body, nil)
+if success then
+    print("Status code:", response.status_code)
+    print("Response body:", response.body)
+else
+    print("Error:", response)
+end
+
+-- Asynchronous request with callback
+local function handleResponse(success, response)
+    if success then
+        print("Async request completed with status:", response.status_code)
+        print("Response body:", response.body)
+    else
+        print("Async request failed:", response)
+    end
+end
+
+http.fetch("GET", "https://api.example.com/data", nil, "", handleResponse)
+print("Request sent asynchronously, continuing execution...")
+```
+
+The `http.fetch` function accepts the following parameters:
+- `method`: HTTP method (GET, POST, PUT, DELETE, etc.)
+- `url`: The URL to request
+- `headers`: A table of HTTP headers (optional)
+- `body`: Request body (optional)
+- `callback`: A function to handle the response asynchronously (optional)
+
+The response object contains:
+- `status_code`: HTTP status code
+- `body`: Response body as a string
+- `headers`: A table of response headers
 
 or use configuration file / environment variables:
 
