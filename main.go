@@ -147,6 +147,10 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 
 	var queryBuilder string
 	completer := func(line string, pos int) (head string, completions []string, tail string) {
+		db := GetDB()
+		if db == nil {
+			return
+		}
 		databases, err := getDatabases(db)
 		if err != nil {
 			log.Println(err)
@@ -194,6 +198,7 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 	for {
 		var prompt string
 		if isTerminal() {
+			db := GetDB()
 			if db == nil {
 				prompt = "tip> "
 			} else {
@@ -241,6 +246,7 @@ func repl(db *sql.DB, outputFormat *OutputFormat) {
 		}
 
 		// Check if database connection is established
+		db := GetDB()
 		if db == nil {
 			log.Println("Error: Not connected to any database. Use .connect to establish a connection.")
 			continue

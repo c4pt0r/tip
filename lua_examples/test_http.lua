@@ -1,3 +1,5 @@
+local json = require("json")
+
 local event_loop = {
 	running = false,
 	pending_tasks = 0
@@ -51,3 +53,44 @@ http.fetch(
 print("Starting event loop...")
 event_loop:run()
 print("Finished!")
+
+-- Synchronous POST example
+local post_data = {
+	name = "morpheus",
+	job = "leader"
+}
+local post_body = json.encode(post_data)
+
+local ok, response = http.fetch(
+	"POST",
+	"https://reqres.in/api/users",
+	{ ["Content-Type"] = "application/json" },
+	post_body
+)
+
+if ok then
+	print("Sync HTTP POST result:", response.body)
+end
+
+-- Asynchronous POST example
+event_loop:add_task()
+http.fetch(
+	"POST",
+	"https://reqres.in/api/users",
+	{
+		["Content-Type"] = "application/json",
+	},
+	post_body,
+	function(ok, result)
+		if ok then
+			print("Async HTTP POST result:", result.body)
+		else
+			print("Error:", result)
+		end
+		event_loop:remove_task()
+	end
+)
+
+print("Starting event loop for POST requests...")
+event_loop:run()
+print("Finished POST examples!")
