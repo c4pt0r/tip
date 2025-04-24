@@ -635,11 +635,8 @@ func main() {
 		if GetDB() == nil {
 			log.Fatal("Error: Not connected to any database. Use .connect to establish a connection first.")
 		}
-		scriptContent, err := os.ReadFile(*evalLuaScript)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to read Lua script file: %v\n", err)
-			os.Exit(1)
-		}
+
+		scriptContent := *evalLuaScript
 		if err := ExecuteLuaScript(string(scriptContent), flag.Args(), os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to execute Lua script: %v\n", err)
 			os.Exit(1)
