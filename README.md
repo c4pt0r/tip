@@ -63,6 +63,17 @@ Example:
 tip -host mytidbserver.com -port 4000 -u myuser -p mypassword -d mydatabase
 ```
 
+
+a more complicated example, drop all the database with name prefix 'test_'
+```
+tip -e "show databases;" -o json 2> /dev/null \
+| jq -r '.[].Database' \
+| grep '^test_' \
+| while read db; do
+    tip -e "DROP DATABASE \`$db\`;"
+  done
+```
+
 ### Interactive Commands
 
 Once connected, you can use the following commands in the interactive shell:
