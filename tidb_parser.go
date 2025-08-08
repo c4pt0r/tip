@@ -44,3 +44,18 @@ func isQuery(stmt string) (bool, error) {
 	}
 	return true, nil
 }
+
+// splitSQLStatements parses the input SQL and returns individual statements
+func splitSQLStatements(sql string) ([]string, error) {
+	stmtNodes, _, err := p.Parse(sql, "", "")
+	if err != nil {
+		return nil, err
+	}
+	
+	var statements []string
+	for _, stmt := range stmtNodes {
+		statements = append(statements, stmt.Text())
+	}
+	
+	return statements, nil
+}

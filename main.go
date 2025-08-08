@@ -86,6 +86,122 @@ func executeSQL(db *sql.DB, query string, resultIOWriter ResultIOWriter) (bool, 
 	return isQ, output, hasRows, affectedRows, nil
 }
 
+// executeMultipleSQL executes multiple SQL statements within a single transaction
+func executeMultipleSQL(db *sql.DB, sqlText string, resultIOWriter ResultIOWriter) ([][]RowResult, []bool, []bool, []int64, error) {
+	statements, err := splitSQLStatements(sqlText)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to parse SQL statements: %w", err)
+	}
+
+	if len(statements) == 0 {
+		return nil, nil, nil, nil, fmt.Errorf("no SQL statements found")
+	}
+
+	// If only one statement, execute it directly without transaction
+	if len(statements) == 1 {
+		isQ, output, hasRows, affectedRows, err := executeSQL(db, statements[0], resultIOWriter)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		return [][]RowResult{output}, []bool{isQ}, []bool{hasRows}, []int64{affectedRows}, nil
+	}
+
+	// Multiple statements - execute in transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	var allOutputs [][]RowResult
+	var allIsQuery []bool
+	var allHasRows []bool
+	var allAffectedRows []int64
+
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+
+		isQ, err := isQuery(stmt)
+		if err != nil {
+			tx.Rollback()
+			return nil, nil, nil, nil, fmt.Errorf("failed to parse SQL statement: %w", err)
+		}
+
+		var output []RowResult
+		var hasRows bool
+		var affectedRows int64
+
+		if isQ {
+			rows, err := tx.Query(stmt)
+			if err != nil {
+				tx.Rollback()
+				return nil, nil, nil, nil, fmt.Errorf("failed to execute SQL: %w", err)
+			}
+			defer rows.Close()
+
+			cols, err := rows.Columns()
+			if err != nil {
+				tx.Rollback()
+				return nil, nil, nil, nil, fmt.Errorf("failed to get column info: %w", err)
+			}
+
+			results := make([]interface{}, len(cols))
+			pointers := make([]interface{}, len(cols))
+			for i := range results {
+				pointers[i] = &results[i]
+			}
+
+			for rows.Next() {
+				hasRows = true
+				if err := rows.Scan(pointers...); err != nil {
+					tx.Rollback()
+					return nil, nil, nil, nil, fmt.Errorf("failed to read data: %w", err)
+				}
+				rowData := RowResult{
+					colNames:  cols,
+					colValues: make([]interface{}, len(cols)),
+				}
+				for i := range cols {
+					rowData.colValues[i] = results[i]
+				}
+				if resultIOWriter != nil {
+					if err := resultIOWriter.Write([]RowResult{rowData}); err != nil {
+						tx.Rollback()
+						return nil, nil, nil, nil, fmt.Errorf("failed to write data: %w", err)
+					}
+				} else {
+					output = append(output, rowData)
+				}
+			}
+			rows.Close()
+		} else {
+			result, err := tx.Exec(stmt)
+			if err != nil {
+				tx.Rollback()
+				return nil, nil, nil, nil, fmt.Errorf("failed to execute SQL: %w", err)
+			}
+			affectedRows, err = result.RowsAffected()
+			if err != nil {
+				tx.Rollback()
+				return nil, nil, nil, nil, fmt.Errorf("failed to get affected rows: %w", err)
+			}
+		}
+
+		allOutputs = append(allOutputs, output)
+		allIsQuery = append(allIsQuery, isQ)
+		allHasRows = append(allHasRows, hasRows)
+		allAffectedRows = append(allAffectedRows, affectedRows)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return allOutputs, allIsQuery, allHasRows, allAffectedRows, nil
+}
+
 var globalOutputFormat *OutputFormat
 var replSuggestion string // Used by ask_cmd.go for REPL suggestion
 
@@ -493,6 +609,16 @@ func printExecutionDetails(execTime time.Duration, hasRows bool, output []RowRes
 	}
 }
 
+// printMultipleResults prints results from multiple SQL statements
+func printMultipleResults(allOutputs [][]RowResult, allIsQuery []bool, allHasRows []bool, allAffectedRows []int64, outputFormat OutputFormat, execTime time.Duration) {
+	for i := range allOutputs {
+		if i > 0 {
+			fmt.Println() // Add blank line between results
+		}
+		printResults(allIsQuery[i], allOutputs[i], outputFormat, allHasRows[i], execTime, allAffectedRows[i])
+	}
+}
+
 func main() {
 	// Command-line flags
 	host := flag.String("host", "", "TiDB Serverless hostname")
@@ -606,7 +732,7 @@ func main() {
 	// Check if -e flag is provided
 	if *execSQL != "" {
 		startTime := time.Now() // Start timing the query execution
-		isQ, output, hasRows, affectedRows, err := executeSQL(GetDB(), *execSQL, resultIOWriter)
+		allOutputs, allIsQuery, allHasRows, allAffectedRows, err := executeMultipleSQL(GetDB(), *execSQL, resultIOWriter)
 		if err != nil {
 			log.Fatalf("Failed to execute SQL: %v", err)
 		}
@@ -615,7 +741,7 @@ func main() {
 			resultIOWriter.Flush()
 		} else {
 			execTime := time.Since(startTime)
-			printResults(isQ, output, parseOutputFormat(*outputFormat), hasRows, execTime, affectedRows)
+			printMultipleResults(allOutputs, allIsQuery, allHasRows, allAffectedRows, parseOutputFormat(*outputFormat), execTime)
 		}
 
 		return
